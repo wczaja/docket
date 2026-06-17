@@ -1,0 +1,11 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: test
+  version: 0.0.1
+modes:
+  - id: BadID-Uppercase
+    severity: high
+    detection:
+      type: regex
+      pattern: foo

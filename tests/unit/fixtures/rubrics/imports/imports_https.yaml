@@ -1,0 +1,13 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: https-importer
+  version: 1.0.0
+imports:
+  - https://example.com/rubric.yaml
+modes:
+  - id: m
+    severity: low
+    detection:
+      type: regex
+      pattern: "m"

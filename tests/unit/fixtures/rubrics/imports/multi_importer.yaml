@@ -1,0 +1,8 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: multi-importer
+  version: 1.0.0
+imports:
+  - file://./multi_a.yaml
+  - file://./multi_b.yaml

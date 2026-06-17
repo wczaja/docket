@@ -1,0 +1,67 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {"attributes": []},
+      "scopeSpans": [
+        {
+          "scope": {"name": "openinference"},
+          "spans": [
+            {
+              "traceId": "trace-error-001",
+              "spanId": "span-root",
+              "name": "agent_run",
+              "startTimeUnixNano": "1700000000000000000",
+              "endTimeUnixNano": "1700000002000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "AGENT"}},
+                {"key": "input.value", "value": {"stringValue": "Delete row 42 from the orders table."}}
+              ],
+              "status": {"code": "STATUS_CODE_ERROR", "message": "tool call rejected by safety filter"}
+            },
+            {
+              "traceId": "trace-error-001",
+              "spanId": "span-llm",
+              "parentSpanId": "span-root",
+              "name": "decide",
+              "startTimeUnixNano": "1700000000500000000",
+              "endTimeUnixNano": "1700000001000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+                {"key": "llm.model_name", "value": {"stringValue": "gpt-4o-mini"}},
+                {"key": "llm.input_messages.0.message.role", "value": {"stringValue": "user"}},
+                {"key": "llm.input_messages.0.message.content", "value": {"stringValue": "Delete row 42 from the orders table."}},
+                {"key": "llm.output_messages.0.message.role", "value": {"stringValue": "assistant"}},
+                {"key": "llm.output_messages.0.message.content", "value": {"stringValue": "I will call delete_record."}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-error-001",
+              "spanId": "span-tool",
+              "parentSpanId": "span-root",
+              "name": "delete_record",
+              "startTimeUnixNano": "1700000001200000000",
+              "endTimeUnixNano": "1700000001800000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "TOOL"}},
+                {"key": "tool.name", "value": {"stringValue": "delete_record"}},
+                {"key": "tool.parameters", "value": {"stringValue": "{\"table\": \"orders\", \"id\": 42}"}}
+              ],
+              "events": [
+                {
+                  "name": "exception",
+                  "timeUnixNano": "1700000001700000000",
+                  "attributes": [
+                    {"key": "exception.type", "value": {"stringValue": "SafetyRejection"}},
+                    {"key": "exception.message", "value": {"stringValue": "destructive operation requires confirmation"}}
+                  ]
+                }
+              ],
+              "status": {"code": "STATUS_CODE_ERROR", "message": "destructive operation requires confirmation"}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

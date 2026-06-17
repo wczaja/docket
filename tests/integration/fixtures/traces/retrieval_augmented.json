@@ -1,0 +1,64 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {"attributes": []},
+      "scopeSpans": [
+        {
+          "scope": {"name": "openinference"},
+          "spans": [
+            {
+              "traceId": "trace-rag-001",
+              "spanId": "span-chain",
+              "name": "rag_chain",
+              "startTimeUnixNano": "1700000000000000000",
+              "endTimeUnixNano": "1700000004000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "CHAIN"}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-rag-001",
+              "spanId": "span-retriever",
+              "parentSpanId": "span-chain",
+              "name": "vector_search",
+              "startTimeUnixNano": "1700000000500000000",
+              "endTimeUnixNano": "1700000001000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "RETRIEVER"}},
+                {"key": "input.value", "value": {"stringValue": "What is the return policy?"}},
+                {"key": "retrieval.documents.0.document.id", "value": {"stringValue": "doc-policy-01"}},
+                {"key": "retrieval.documents.0.document.content", "value": {"stringValue": "Returns accepted within 30 days of purchase."}},
+                {"key": "retrieval.documents.0.document.score", "value": {"doubleValue": 0.91}},
+                {"key": "retrieval.documents.1.document.id", "value": {"stringValue": "doc-policy-02"}},
+                {"key": "retrieval.documents.1.document.content", "value": {"stringValue": "Original receipt required for all returns."}},
+                {"key": "retrieval.documents.1.document.score", "value": {"doubleValue": 0.84}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-rag-001",
+              "spanId": "span-llm",
+              "parentSpanId": "span-chain",
+              "name": "answer",
+              "startTimeUnixNano": "1700000002000000000",
+              "endTimeUnixNano": "1700000003500000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+                {"key": "llm.model_name", "value": {"stringValue": "gpt-4o-mini"}},
+                {"key": "llm.input_messages.0.message.role", "value": {"stringValue": "system"}},
+                {"key": "llm.input_messages.0.message.content", "value": {"stringValue": "Answer using only the provided context."}},
+                {"key": "llm.input_messages.1.message.role", "value": {"stringValue": "user"}},
+                {"key": "llm.input_messages.1.message.content", "value": {"stringValue": "What is the return policy?"}},
+                {"key": "llm.output_messages.0.message.role", "value": {"stringValue": "assistant"}},
+                {"key": "llm.output_messages.0.message.content", "value": {"stringValue": "Returns are accepted within 30 days of purchase, with the original receipt."}},
+                {"key": "llm.token_count.total", "value": {"intValue": "85"}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

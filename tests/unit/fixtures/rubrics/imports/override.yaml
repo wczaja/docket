@@ -1,0 +1,13 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: overrider
+  version: 1.0.0
+imports:
+  - file://./base.yaml
+modes:
+  - id: base-mode
+    severity: critical
+    detection:
+      type: regex
+      pattern: "overridden"

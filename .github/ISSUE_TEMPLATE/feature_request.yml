@@ -1,0 +1,37 @@
+name: Feature request
+description: Propose an enhancement to the runtime, DSL, or CLI.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: >
+        Describe the triage workflow gap, not just the feature. "When I
+        run X against Y, I can't Z."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: CLI flags, config keys, or DSL fields you'd expect.
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      description: >
+        These are explicit non-goals (see docs/design.md §1.5 and
+        CONTRIBUTING.md); requests for them will be declined.
+      options:
+        - label: This is not a web UI, a trace store, a local database, or a new eval framework.
+          required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: >
+        Including "do it outside agent-triage" — e.g. in the rubric, in
+        the backend, or in a downstream consumer of the run report.

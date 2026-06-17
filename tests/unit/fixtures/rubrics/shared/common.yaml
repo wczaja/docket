@@ -1,0 +1,14 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: test-shared-common
+  version: 0.0.1
+  description: Shared synthetic mode imported by valid_full.yaml.
+modes:
+  - id: shared-timeout
+    name: Shared Timeout
+    description: A synthetic shared mode so valid_full.yaml exercises imports.
+    severity: low
+    detection:
+      type: regex
+      pattern: "(?i)request timed out"

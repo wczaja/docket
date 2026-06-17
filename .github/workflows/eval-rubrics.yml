@@ -1,0 +1,78 @@
+name: Eval rubrics
+
+# Design §6: self-test builtin rubrics on PR. Two tiers:
+#
+#   validate   — schema + import validation of every builtin and example
+#                rubric. No network, no secrets; runs on every PR that
+#                touches rubric content or the code that interprets it.
+#   self-test  — exercises each rubric's `llm_judge` examples against a
+#                live judge model. Needs ANTHROPIC_API_KEY, so (like the
+#                integration workflow) it only runs on demand or when the
+#                repo opts in via the RUN_RUBRIC_SELFTEST variable —
+#                secrets are unavailable to fork PRs by design.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "agent_triage/rubric/**"
+      - "agent_triage/detectors/**"
+      - "rubrics/**"
+      - ".github/workflows/eval-rubrics.yml"
+  pull_request:
+    paths:
+      - "agent_triage/rubric/**"
+      - "agent_triage/detectors/**"
+      - "rubrics/**"
+      - ".github/workflows/eval-rubrics.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: pip install uv
+      - name: Install package
+        run: uv pip install --system -e .
+      - name: Validate builtin rubrics
+        run: |
+          set -euo pipefail
+          for name in agents rag routing multi-agent; do
+            agent-triage validate "agent-triage.dev/builtin/${name}/v1"
+          done
+      - name: Validate example rubrics
+        run: |
+          set -euo pipefail
+          for f in rubrics/examples/*.yaml; do
+            agent-triage validate "$f"
+          done
+
+  self-test:
+    runs-on: ubuntu-latest
+    needs: validate
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.RUN_RUBRIC_SELFTEST == 'true' }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: pip install uv
+      - name: Install package
+        run: uv pip install --system -e .
+      - name: Self-test builtin + example rubrics against a live judge
+        run: |
+          set -euo pipefail
+          for name in agents rag routing multi-agent; do
+            agent-triage self-test "agent-triage.dev/builtin/${name}/v1" --batch 8
+          done
+          for f in rubrics/examples/*.yaml; do
+            agent-triage self-test "$f" --batch 8
+          done

@@ -1,0 +1,54 @@
+name: Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Daily adapter run against live services (design §8.2.7 mitigation:
+    # catch upstream API changes before users do).
+    - cron: "17 6 * * *"
+
+jobs:
+  phoenix-e2e:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || vars.RUN_INTEGRATION == 'true' }}
+    services:
+      phoenix:
+        image: arizephoenix/phoenix:latest
+        ports:
+          - 6006:6006
+          - 4317:4317
+        options: >-
+          --health-cmd "wget -qO- http://localhost:6006 || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      PHOENIX_URL: http://localhost:6006
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        run: pip install uv
+      - name: Install package + dev deps
+        run: uv pip install --system -e ".[dev]"
+      - name: Wait for Phoenix
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:6006 >/dev/null; then
+              echo "Phoenix ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "Phoenix did not become reachable" >&2
+          exit 1
+      - name: Run Phase 4 acceptance integration test
+        run: pytest --run-integration -m integration -v --no-cov
+        env:
+          PHOENIX_URL: ${{ env.PHOENIX_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

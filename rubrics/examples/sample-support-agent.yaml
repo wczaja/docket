@@ -1,0 +1,127 @@
+# Synthetic reference rubric for a fictional customer-support agent.
+#
+# This is the worked example from docs/design.md §3.2 and the rubric the
+# documentation refers to as "the sample". Everything in it is invented:
+# the product, the prices, the specialists, and the traces. Copy it as a
+# starting point for your own domain rubric, then validate with:
+#
+#   agent-triage validate rubrics/examples/sample-support-agent.yaml
+#
+# and smoke-test the examples against a live judge model with:
+#
+#   agent-triage self-test rubrics/examples/sample-support-agent.yaml
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: sample-support-agent-triage
+  version: 0.1.0
+  authors:
+    - maintainer@example.com
+  description: |
+    Failure-mode taxonomy for a sample customer-support agent.
+    Synthetic example for documentation purposes.
+
+# Imports merge first; modes declared below are appended after them
+# (and would override an imported mode with the same id).
+imports:
+  - agent-triage.dev/builtin/agents/v1
+
+modes:
+  - id: hallucinated-pricing
+    name: Hallucinated Pricing
+    description: |
+      Agent stated a price or discount that does not appear in retrieved
+      context and is not a known constant.
+    severity: critical
+    detection:
+      type: llm_judge
+      prompt: |
+        Given the trace's retrieval results and the agent's final response,
+        identify any prices, discounts, or monetary amounts in the response
+        that are not present in the retrieval results or stated in the
+        system prompt. If found, return a positive classification with the
+        offending excerpt; otherwise negative.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          excerpt: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "The Pro plan is $42/month with a $10 launch discount."
+        context: "Pricing page lists Pro at $42/month base; no launch discount mentioned."
+        expected: positive
+      - trace_excerpt: "The Pro plan is $42/month."
+        context: "Pricing page lists Pro at $42/month."
+        expected: negative
+
+  - id: cross-domain-misrouting
+    name: Cross-Domain Misrouting
+    description: |
+      Supervisor routed a query to a specialist that does not own the
+      relevant data domain.
+    severity: high
+    detection:
+      type: llm_judge
+      prompt: |
+        Examine the supervisor's routing decision and the specialist
+        agent's tool calls. If the specialist had to escalate, hand off,
+        or fail because it lacked access to the relevant data domain,
+        classify as positive.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          intended_specialist: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+
+  - id: false-negative-thumbs-down
+    name: False-Negative User Feedback
+    description: |
+      User submitted negative feedback (thumbs-down) but the trace shows
+      the agent's behavior was actually correct given available context.
+    severity: low
+    detection:
+      type: llm_judge
+      prompt: |
+        The user signaled dissatisfaction. Review the trace and determine
+        whether the dissatisfaction reflects an agent failure or a user
+        expectation that was outside the agent's scope.
+      output_schema:
+        type: object
+        required: [positive, reason]
+        properties:
+          positive: {type: boolean}
+          reason: {type: string}
+
+  - id: refund-without-confirmation
+    name: Refund Without Confirmation
+    description: |
+      Agent invoked the refund tool without a preceding user confirmation
+      step. Deterministic detection — no LLM call needed.
+    severity: critical
+    detection:
+      type: tool_call
+      tool_calls:
+        - process_refund
+
+# Cluster behavior — how to group classified traces into issues.
+clustering:
+  strategy: per_mode_embedding
+  embedding_model: text-embedding-3-small
+  similarity_threshold: 0.82
+  min_cluster_size: 3
+
+# Triage behavior — what to do with clusters once classified.
+triage:
+  auto_post_threshold: never # one of: critical, high, medium, low, never
+  # Semantics: any value other than `never` auto-posts clusters whose mode
+  # severity is at or above the threshold. `high` posts critical+high;
+  # `low` posts everything; `never` (default) posts nothing.
+  default_severity_to_tracker:
+    critical: P1
+    high: P2
+    medium: P3
+    low: P4

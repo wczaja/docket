@@ -1,0 +1,26 @@
+# Local agent/instruction files (not part of the published project)
+CLAUDE.md
+CLAUDE.local.md
+
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# Tool caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+
+# uv lockfile — project is unlocked; pyproject.toml is the source of truth
+uv.lock

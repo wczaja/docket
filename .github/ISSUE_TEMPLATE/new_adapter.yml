@@ -1,0 +1,50 @@
+name: New adapter proposal
+description: Propose a new trace-backend or tracker adapter.
+labels: ["adapter", "enhancement"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Adapter kind
+      options:
+        - Trace backend (read + annotate)
+        - Tracker (issue write)
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      placeholder: "e.g. Honeycomb, Azure DevOps Boards"
+    validations:
+      required: true
+  - type: textarea
+    id: api
+    attributes:
+      label: API surface
+      description: >
+        Link to the API docs. For trace backends: how do you list traces
+        in a time window, fetch one trace's spans, and write an
+        annotation/score keyed by trace id? Is the data
+        OpenInference-mappable? For trackers: list/search/create/update
+        issues and comment, plus label (or equivalent) support for dedup.
+    validations:
+      required: true
+  - type: dropdown
+    id: license
+    attributes:
+      label: System license / access
+      description: OSS backends are in-scope; proprietary ones are community-maintained (design §1.5).
+      options:
+        - Open source, self-hostable
+        - Commercial with free tier (testable in CI)
+        - Commercial, no free tier
+    validations:
+      required: true
+  - type: checkboxes
+    id: commitment
+    attributes:
+      label: Implementation
+      options:
+        - label: I intend to implement this myself following docs/adapters.md and CONTRIBUTING.md.
+        - label: I can provide sandbox credentials or a docker-compose recipe for integration tests.

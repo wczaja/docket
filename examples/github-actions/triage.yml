@@ -1,0 +1,60 @@
+# Scheduled agent-triage run — copy into .github/workflows/ of your repo.
+# See docs/triage-as-ci.md for the full walkthrough and knob explanations.
+name: agent-triage
+
+on:
+  schedule:
+    - cron: "5 * * * *" # hourly at :05; pair with --since 2h for overlap
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install agent-triage
+        run: pip install agent-triage
+
+      - name: Run triage
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Embeddings for clustering. Alternatively set VOYAGE_API_KEY and
+          # pass --embedding-provider voyage.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # PAT with Issues:write on the target repo (NOT the default
+          # workflow token, which is scoped to this repo only).
+          GITHUB_TOKEN: ${{ secrets.TRIAGE_GITHUB_TOKEN }}
+        run: |
+          agent-triage run \
+            --backend phoenix \
+            --phoenix-url "${{ vars.PHOENIX_URL }}" \
+            --tracker github \
+            --github-owner "${{ github.repository_owner }}" \
+            --github-repo agent-issues \
+            --rubric agent-triage.dev/builtin/agents/v1 \
+            --since 2h \
+            --queue-dir ./triage-queue \
+            --emit-evals ./eval-cases \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload queued drafts for human review
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: queued-drafts
+          path: ./triage-queue
+          if-no-files-found: ignore
+
+      - name: Upload candidate eval cases
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-cases
+          path: ./eval-cases
+          if-no-files-found: ignore

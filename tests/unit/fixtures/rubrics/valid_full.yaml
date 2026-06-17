@@ -1,0 +1,56 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: test-full
+  version: 0.0.1
+  authors:
+    - maintainer@example.com
+  description: |
+    Exercises every optional field so the spec round-trip is non-trivial.
+
+imports:
+  - file://./shared/common.yaml
+
+modes:
+  - id: hallucinated-fact
+    name: Hallucinated Fact
+    severity: critical
+    detection:
+      type: llm_judge
+      prompt: Is the agent stating a fact unsupported by retrieval?
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "The capital is Atlantis."
+        context: "Retrieved docs do not mention Atlantis."
+        expected: positive
+      - trace_excerpt: "The capital is Paris."
+        context: "Retrieved docs say Paris."
+        expected: negative
+
+  - id: latency-blowup
+    name: Latency Blowup
+    severity: medium
+    detection:
+      type: metric_threshold
+      metric: latency_ms
+      threshold: 5000
+      operator: ">"
+
+clustering:
+  strategy: per_mode_embedding
+  embedding_model: text-embedding-3-small
+  similarity_threshold: 0.82
+  min_cluster_size: 3
+
+triage:
+  auto_post_threshold: never
+  default_severity_to_tracker:
+    critical: P1
+    high: P2
+    medium: P3
+    low: P4

@@ -1,0 +1,11 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: multi-b
+  version: 1.0.0
+modes:
+  - id: shared
+    severity: high
+    detection:
+      type: regex
+      pattern: "from-b"

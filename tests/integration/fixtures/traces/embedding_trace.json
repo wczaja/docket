@@ -1,0 +1,43 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {"attributes": []},
+      "scopeSpans": [
+        {
+          "scope": {"name": "openinference"},
+          "spans": [
+            {
+              "traceId": "trace-embed-001",
+              "spanId": "span-embed",
+              "name": "embed_query",
+              "startTimeUnixNano": "1700000000000000000",
+              "endTimeUnixNano": "1700000000500000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "EMBEDDING"}},
+                {"key": "embedding.model_name", "value": {"stringValue": "text-embedding-3-small"}},
+                {"key": "embedding.embeddings.0.embedding.text", "value": {"stringValue": "What is the return policy?"}},
+                {"key": "embedding.embeddings.0.embedding.vector", "value": {"arrayValue": {"values": [{"doubleValue": 0.01}, {"doubleValue": -0.02}, {"doubleValue": 0.03}]}}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-embed-001",
+              "spanId": "span-retriever",
+              "parentSpanId": "span-embed",
+              "name": "vector_search",
+              "startTimeUnixNano": "1700000000600000000",
+              "endTimeUnixNano": "1700000001000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "RETRIEVER"}},
+                {"key": "retrieval.documents.0.document.id", "value": {"stringValue": "doc-1"}},
+                {"key": "retrieval.documents.0.document.content", "value": {"stringValue": "Return policy: 30 days."}},
+                {"key": "retrieval.documents.0.document.score", "value": {"doubleValue": 0.92}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {"attributes": []},
+      "scopeSpans": [
+        {
+          "scope": {"name": "openinference"},
+          "spans": [
+            {
+              "traceId": "trace-tool-001",
+              "spanId": "span-agent",
+              "name": "agent_run",
+              "startTimeUnixNano": "1700000000000000000",
+              "endTimeUnixNano": "1700000005000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "AGENT"}},
+                {"key": "input.value", "value": {"stringValue": "What is the weather in Paris?"}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-tool-001",
+              "spanId": "span-llm-1",
+              "parentSpanId": "span-agent",
+              "name": "decide_tool",
+              "startTimeUnixNano": "1700000000500000000",
+              "endTimeUnixNano": "1700000001500000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+                {"key": "llm.model_name", "value": {"stringValue": "claude-haiku-4-5-20251001"}},
+                {"key": "llm.input_messages.0.message.role", "value": {"stringValue": "user"}},
+                {"key": "llm.input_messages.0.message.content", "value": {"stringValue": "What is the weather in Paris?"}},
+                {"key": "llm.output_messages.0.message.role", "value": {"stringValue": "assistant"}},
+                {"key": "llm.output_messages.0.message.content", "value": {"stringValue": "I'll look that up."}},
+                {"key": "llm.token_count.total", "value": {"intValue": "42"}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-tool-001",
+              "spanId": "span-tool",
+              "parentSpanId": "span-agent",
+              "name": "get_weather",
+              "startTimeUnixNano": "1700000002000000000",
+              "endTimeUnixNano": "1700000003000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "TOOL"}},
+                {"key": "tool.name", "value": {"stringValue": "get_weather"}},
+                {"key": "tool.description", "value": {"stringValue": "Look up current weather for a city"}},
+                {"key": "tool.parameters", "value": {"stringValue": "{\"city\": \"Paris\"}"}},
+                {"key": "output.value", "value": {"stringValue": "Sunny, 21C"}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-tool-001",
+              "spanId": "span-llm-2",
+              "parentSpanId": "span-agent",
+              "name": "summarize",
+              "startTimeUnixNano": "1700000003500000000",
+              "endTimeUnixNano": "1700000004500000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+                {"key": "llm.model_name", "value": {"stringValue": "claude-haiku-4-5-20251001"}},
+                {"key": "llm.input_messages.0.message.role", "value": {"stringValue": "user"}},
+                {"key": "llm.input_messages.0.message.content", "value": {"stringValue": "Tool returned: Sunny, 21C. Summarize for the user."}},
+                {"key": "llm.output_messages.0.message.role", "value": {"stringValue": "assistant"}},
+                {"key": "llm.output_messages.0.message.content", "value": {"stringValue": "It's sunny in Paris with a temperature of 21C."}},
+                {"key": "llm.token_count.total", "value": {"intValue": "30"}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

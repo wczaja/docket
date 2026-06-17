@@ -1,0 +1,11 @@
+apiVersion: agent-triage.dev/v99
+kind: Rubric
+metadata:
+  name: future
+  version: 1.0.0
+modes:
+  - id: m
+    severity: low
+    detection:
+      type: regex
+      pattern: "m"

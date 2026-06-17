@@ -1,0 +1,20 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: test-minimal
+  version: 0.0.1
+  description: Minimal valid rubric used by the Phase 0 acceptance test.
+modes:
+  - id: test-mode
+    name: Test Mode
+    description: A synthetic mode for verifying the spec round-trips.
+    severity: high
+    detection:
+      type: llm_judge
+      prompt: Is this a test?
+      output_schema:
+        type: object
+        required: [positive]
+        properties:
+          positive:
+            type: boolean

@@ -1,0 +1,101 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {"attributes": []},
+      "scopeSpans": [
+        {
+          "scope": {"name": "openinference"},
+          "spans": [
+            {
+              "traceId": "trace-multi-001",
+              "spanId": "span-supervisor",
+              "name": "supervisor",
+              "startTimeUnixNano": "1700000000000000000",
+              "endTimeUnixNano": "1700000010000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "AGENT"}},
+                {"key": "input.value", "value": {"stringValue": "Plan a 3-day trip to Lisbon."}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-multi-001",
+              "spanId": "span-flights",
+              "parentSpanId": "span-supervisor",
+              "name": "flights_specialist",
+              "startTimeUnixNano": "1700000001000000000",
+              "endTimeUnixNano": "1700000004000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "AGENT"}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-multi-001",
+              "spanId": "span-flights-llm",
+              "parentSpanId": "span-flights",
+              "name": "find_flights",
+              "startTimeUnixNano": "1700000001500000000",
+              "endTimeUnixNano": "1700000003500000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+                {"key": "llm.model_name", "value": {"stringValue": "claude-haiku-4-5-20251001"}},
+                {"key": "llm.input_messages.0.message.role", "value": {"stringValue": "user"}},
+                {"key": "llm.input_messages.0.message.content", "value": {"stringValue": "Find flights to Lisbon."}},
+                {"key": "llm.output_messages.0.message.role", "value": {"stringValue": "assistant"}},
+                {"key": "llm.output_messages.0.message.content", "value": {"stringValue": "Direct flights available at 09:00 and 14:00."}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-multi-001",
+              "spanId": "span-hotels",
+              "parentSpanId": "span-supervisor",
+              "name": "hotels_specialist",
+              "startTimeUnixNano": "1700000004500000000",
+              "endTimeUnixNano": "1700000007000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "AGENT"}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-multi-001",
+              "spanId": "span-hotels-llm",
+              "parentSpanId": "span-hotels",
+              "name": "find_hotels",
+              "startTimeUnixNano": "1700000005000000000",
+              "endTimeUnixNano": "1700000006500000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+                {"key": "llm.model_name", "value": {"stringValue": "claude-haiku-4-5-20251001"}},
+                {"key": "llm.input_messages.0.message.role", "value": {"stringValue": "user"}},
+                {"key": "llm.input_messages.0.message.content", "value": {"stringValue": "Find 3-night hotel in Lisbon."}},
+                {"key": "llm.output_messages.0.message.role", "value": {"stringValue": "assistant"}},
+                {"key": "llm.output_messages.0.message.content", "value": {"stringValue": "Boutique hotel in Alfama available."}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            },
+            {
+              "traceId": "trace-multi-001",
+              "spanId": "span-summary",
+              "parentSpanId": "span-supervisor",
+              "name": "final_summary",
+              "startTimeUnixNano": "1700000007500000000",
+              "endTimeUnixNano": "1700000009500000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+                {"key": "llm.model_name", "value": {"stringValue": "claude-haiku-4-5-20251001"}},
+                {"key": "llm.input_messages.0.message.role", "value": {"stringValue": "user"}},
+                {"key": "llm.input_messages.0.message.content", "value": {"stringValue": "Combine flight and hotel findings into one plan."}},
+                {"key": "llm.output_messages.0.message.role", "value": {"stringValue": "assistant"}},
+                {"key": "llm.output_messages.0.message.content", "value": {"stringValue": "Day 1: 09:00 flight, hotel in Alfama. Day 2-3: explore Lisbon."}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

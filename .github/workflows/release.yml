@@ -1,0 +1,92 @@
+name: Release
+
+# Publishes to PyPI on tag push (v*.*.*).
+#
+# Authentication is via PyPI Trusted Publishers — no API token in repo
+# secrets. One-time setup on PyPI:
+#
+#   1. Visit https://pypi.org/manage/account/publishing/
+#   2. Add a "pending" publisher for the project name "agent-triage" with:
+#        Owner: wczaja
+#        Repository: agent-triage
+#        Workflow: release.yml
+#        Environment: release
+#   3. (Optional) Pre-create the project on PyPI by uploading a 0.1.0
+#      sdist+wheel from your laptop the first time, then convert the
+#      pending publisher to a regular publisher.
+#
+# To cut a release:
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# The job will build sdist + wheel via `uv build`, verify the version in
+# pyproject.toml matches the tag, and publish via OIDC.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Verify tag matches pyproject version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER=$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          if [ "$TAG" != "$VER" ]; then
+            echo "Tag ${GITHUB_REF_NAME} (-> $TAG) does not match pyproject version $VER" >&2
+            exit 1
+          fi
+          echo "Tag and version agree: $VER"
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Show artifacts
+        run: ls -lah dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI (Trusted Publisher)
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      url: https://pypi.org/p/agent-triage
+    # Required for PyPI OIDC.
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish via PyPI Trusted Publisher
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Default username/password unset → use OIDC (Trusted Publisher).
+          packages-dir: dist/
+          # Verify the upload with a quick install in a temp dir; skip on
+          # first release since the package doesn't exist on PyPI yet.
+          verify-metadata: true
+          skip-existing: false

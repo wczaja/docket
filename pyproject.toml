@@ -1,0 +1,191 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-triage"
+version = "1.0.0"
+description = "Observability-platform-agnostic triage runtime for LLM agent traces"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "agent-triage maintainers" }]
+keywords = [
+    "llm",
+    "agents",
+    "observability",
+    "tracing",
+    "openinference",
+    "evaluation",
+    "failure-modes",
+    "triage",
+    "mcp",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Bug Tracking",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "pydantic>=2.5,<3",
+    "pyyaml>=6,<7",
+    "click>=8.1,<9",
+    "jsonschema>=4.21,<5",
+    "anthropic>=0.40,<1",
+    "openai>=1.50,<2",
+    "httpx>=0.27,<1",
+    "mcp>=1.0,<2",
+    "scikit-learn>=1.8,<2",
+    "numpy>=1.26,<3",
+    "deepagents>=0.6,<1",
+    "openinference-instrumentation-anthropic>=0.1,<1",
+    "openinference-instrumentation-openai>=0.1,<1",
+    "arize-phoenix-otel>=0.5,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/wczaja/agent-triage"
+Repository = "https://github.com/wczaja/agent-triage"
+Issues = "https://github.com/wczaja/agent-triage/issues"
+Documentation = "https://github.com/wczaja/agent-triage/blob/main/docs/quickstart.md"
+Changelog = "https://github.com/wczaja/agent-triage/releases"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "pre-commit>=3.7",
+    "types-PyYAML",
+    "types-jsonschema",
+]
+
+[project.scripts]
+agent-triage = "agent_triage.cli:main"
+agent-triage-adapter-phoenix = "agent_triage.mcp_servers.adapter_phoenix:cli_main"
+agent-triage-adapter-langfuse = "agent_triage.mcp_servers.adapter_langfuse:cli_main"
+agent-triage-adapter-langsmith = "agent_triage.mcp_servers.adapter_langsmith:cli_main"
+agent-triage-adapter-jira = "agent_triage.mcp_servers.adapter_jira:cli_main"
+agent-triage-adapter-linear = "agent_triage.mcp_servers.adapter_linear:cli_main"
+agent-triage-adapter-github = "agent_triage.mcp_servers.adapter_github:cli_main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["agent_triage"]
+
+[tool.hatch.build]
+include = [
+    "agent_triage/**/*.py",
+    "agent_triage/**/*.json",
+    "agent_triage/**/*.yaml",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W",      # pycodestyle, pyflakes
+    "I",                # isort
+    "B",                # flake8-bugbear
+    "UP",               # pyupgrade
+    "N",                # pep8-naming
+    "ASYNC",            # async correctness
+    "S",                # bandit
+    "C4",               # comprehensions
+    "PIE",              # misc
+    "PT",               # pytest style
+    "RET",              # return statements
+    "SIM",              # simplifications
+    "TID",              # tidy imports
+]
+ignore = [
+    "S101",             # asserts (we re-allow per-file for tests below anyway)
+    "N815",             # mixedCase fields — Pydantic models use apiVersion to match YAML
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unused_configs = true
+
+[[tool.mypy.overrides]]
+module = ["jsonschema.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "deepagents.*", "openinference.*", "phoenix.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = [
+    "--cov=agent_triage.rubric",
+    "--cov=agent_triage.detectors",
+    "--cov=agent_triage.models",
+    "--cov=agent_triage.llm",
+    "--cov=agent_triage.self_test",
+    "--cov=agent_triage.adapters",
+    "--cov=agent_triage.mcp_servers",
+    "--cov=agent_triage.runtime",
+    "--cov=agent_triage.agent",
+    "--cov=agent_triage.cli",
+    "--cov=agent_triage.config",
+    "--cov=agent_triage.errors",
+    "--cov=agent_triage.observability",
+    "--cov=agent_triage.sampling",
+    "--cov=agent_triage.cost",
+    "--cov=agent_triage.queue_store",
+    "--cov-report=term-missing",
+    "--cov-fail-under=90",
+]
+
+[tool.coverage.run]
+branch = false
+source = [
+    "agent_triage.rubric",
+    "agent_triage.detectors",
+    "agent_triage.models",
+    "agent_triage.llm",
+    "agent_triage.self_test",
+    "agent_triage.adapters",
+    "agent_triage.mcp_servers",
+    "agent_triage.runtime",
+    "agent_triage.agent",
+    "agent_triage.cli",
+    "agent_triage.config",
+    "agent_triage.errors",
+    "agent_triage.observability",
+    "agent_triage.sampling",
+    "agent_triage.cost",
+    "agent_triage.queue_store",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

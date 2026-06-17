@@ -1,0 +1,13 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: builtin-importer
+  version: 1.0.0
+imports:
+  - agent-triage.dev/builtin/agents/v1
+modes:
+  - id: project-specific
+    severity: medium
+    detection:
+      type: regex
+      pattern: "specific"

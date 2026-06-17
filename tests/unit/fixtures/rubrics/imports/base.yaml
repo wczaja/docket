@@ -1,0 +1,12 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: base
+  version: 1.0.0
+modes:
+  - id: base-mode
+    name: Base mode
+    severity: low
+    detection:
+      type: regex
+      pattern: "from-base"

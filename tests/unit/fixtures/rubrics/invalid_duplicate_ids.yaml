@@ -1,0 +1,16 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: dup
+  version: 1.0.0
+modes:
+  - id: foo
+    severity: low
+    detection:
+      type: regex
+      pattern: "a"
+  - id: foo
+    severity: high
+    detection:
+      type: regex
+      pattern: "b"

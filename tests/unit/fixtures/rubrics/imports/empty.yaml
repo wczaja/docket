@@ -1,0 +1,5 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: empty
+  version: 1.0.0

@@ -1,0 +1,13 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: self
+  version: 1.0.0
+imports:
+  - file://./self_import.yaml
+modes:
+  - id: m
+    severity: low
+    detection:
+      type: regex
+      pattern: "m"

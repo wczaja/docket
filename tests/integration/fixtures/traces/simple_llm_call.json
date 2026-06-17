@@ -1,0 +1,33 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {"attributes": []},
+      "scopeSpans": [
+        {
+          "scope": {"name": "openinference"},
+          "spans": [
+            {
+              "traceId": "trace-simple-001",
+              "spanId": "span-001",
+              "name": "completion",
+              "startTimeUnixNano": "1700000000000000000",
+              "endTimeUnixNano": "1700000001000000000",
+              "attributes": [
+                {"key": "openinference.span.kind", "value": {"stringValue": "LLM"}},
+                {"key": "llm.model_name", "value": {"stringValue": "gpt-4o-mini"}},
+                {"key": "llm.input_messages.0.message.role", "value": {"stringValue": "user"}},
+                {"key": "llm.input_messages.0.message.content", "value": {"stringValue": "What is 2+2?"}},
+                {"key": "llm.output_messages.0.message.role", "value": {"stringValue": "assistant"}},
+                {"key": "llm.output_messages.0.message.content", "value": {"stringValue": "2 plus 2 equals 4."}},
+                {"key": "llm.token_count.prompt", "value": {"intValue": "12"}},
+                {"key": "llm.token_count.completion", "value": {"intValue": "9"}},
+                {"key": "llm.token_count.total", "value": {"intValue": "21"}}
+              ],
+              "status": {"code": "STATUS_CODE_OK"}
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

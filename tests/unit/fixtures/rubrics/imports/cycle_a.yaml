@@ -1,0 +1,13 @@
+apiVersion: agent-triage.dev/v1
+kind: Rubric
+metadata:
+  name: cycle-a
+  version: 1.0.0
+imports:
+  - file://./cycle_b.yaml
+modes:
+  - id: a-mode
+    severity: low
+    detection:
+      type: regex
+      pattern: "a"

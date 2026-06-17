@@ -1,0 +1,41 @@
+# Example agent-triage runtime config.
+# Copy to agent-triage.yaml and adjust for your environment.
+
+trace_backend:
+  type: mcp
+  command: agent-triage-adapter-phoenix
+  env:
+    PHOENIX_URL: http://localhost:6006
+
+tracker:
+  type: mcp
+  command: agent-triage-adapter-github
+  env:
+    GITHUB_TOKEN: ${GITHUB_TOKEN}
+    GITHUB_REPO: my-org/my-repo
+
+rubric: agent-triage.dev/builtin/agents/v1
+
+# Hard cap on traces processed per run, measured on the effective workload
+# (post-sampling, post-checkpoint). Exceeding it raises BudgetExceededError
+# before any trace is fetched; silent truncation is forbidden. Narrow the
+# window, pass --sample N, or raise the cap. Override per-run: --max-traces.
+max_traces_per_run: 1000
+
+# Optional dollar ceiling on the pre-flight cost estimate (one classifier
+# call per trace x mode). When set, every run — not just --dry-run — aborts
+# before any trace fetch if the estimate exceeds it. Unset: no dollar gating.
+# max_estimated_cost_usd: 25.0
+
+# Auto-post threshold. One of: critical, high, medium, low, never.
+# Any value other than `never` auto-posts clusters whose severity is at or
+# above the threshold. Default: never (human reviews everything).
+auto_post_threshold: never
+
+# Where the triage agent emits its own observability traces.
+# Defaults to Phoenix when not set.
+instrumentation_backend:
+  type: mcp
+  command: agent-triage-adapter-phoenix
+  env:
+    PHOENIX_URL: http://localhost:6006

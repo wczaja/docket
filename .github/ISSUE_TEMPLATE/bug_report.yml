@@ -1,0 +1,64 @@
+name: Bug report
+description: Something doesn't work the way the docs say it should.
+labels: ["bug"]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: agent-triage version
+      description: Output of `agent-triage --version`.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Trace backend
+      options:
+        - Phoenix
+        - Langfuse
+        - LangSmith
+        - n/a
+    validations:
+      required: true
+  - type: dropdown
+    id: tracker
+    attributes:
+      label: Tracker
+      options:
+        - none / local queue
+        - Jira
+        - Linear
+        - GitHub Issues
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: >
+        What you ran, what you expected, what you got. Include the full
+        command line (redact tokens/hostnames) and the error output.
+        REMINDER: never paste real trace contents or credentials —
+        reproduce with synthetic data where possible.
+      placeholder: |
+        Command:
+        Expected:
+        Actual (full error output):
+    validations:
+      required: true
+  - type: textarea
+    id: rubric
+    attributes:
+      label: Rubric (if relevant)
+      description: >
+        The rubric YAML (or the builtin URI) involved, if the bug is in
+        validation, classification, or clustering. Synthetic content only.
+      render: yaml
+  - type: input
+    id: python
+    attributes:
+      label: Python version and OS
+      placeholder: "3.12 on Ubuntu 24.04"
+    validations:
+      required: true
