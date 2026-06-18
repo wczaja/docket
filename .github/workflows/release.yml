@@ -71,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
-      url: https://pypi.org/p/docket
+      url: https://pypi.org/p/docket-runtime
     # Required for PyPI OIDC.
     permissions:
       id-token: write

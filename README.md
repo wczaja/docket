@@ -27,8 +27,8 @@ GitHub-Issues tracker.
 ### 1. Install
 
 ```bash
-pip install docket
-# or:  uv pip install docket
+pip install docket-runtime
+# or:  uv pip install docket-runtime
 ```
 
 ### 2. Bring up Phoenix

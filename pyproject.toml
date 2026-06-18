@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "docket"
+name = "docket-runtime"
 version = "1.0.0"
 description = "Observability-platform-agnostic triage runtime for LLM agent traces"
 readme = "README.md"

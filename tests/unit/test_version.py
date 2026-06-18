@@ -6,7 +6,7 @@ import docket
 
 
 def test_dunder_version_matches_distribution_metadata() -> None:
-    assert docket.__version__ == version("docket")
+    assert docket.__version__ == version("docket-runtime")
 
 
 def test_version_is_a_release_version() -> None:

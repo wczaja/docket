@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install docket
-        run: pip install docket
+        run: pip install docket-runtime
 
       - name: Run triage
         env:

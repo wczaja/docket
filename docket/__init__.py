@@ -5,7 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 from docket.errors import DocketError
 
 try:
-    __version__ = version("docket")
+    __version__ = version("docket-runtime")
 except PackageNotFoundError:  # pragma: no cover - source tree without an installed dist
     __version__ = "0.0.0+uninstalled"
 

@@ -51,7 +51,7 @@ def configure_instrumentation(
     except ImportError as e:
         raise ConfigError(
             f"Instrumentation was requested but its dependencies failed to import: {e}. "
-            "Reinstall docket with the openinference-instrumentation-* and "
+            "Reinstall docket-runtime with the openinference-instrumentation-* and "
             "arize-phoenix-otel packages available."
         ) from e
 

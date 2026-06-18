@@ -811,7 +811,7 @@ Each phase has concrete deliverables and machine-verifiable acceptance criteria.
 **Acceptance criteria:**
 - All three tracker adapters pass identical integration tests
 - All four builtin rubrics validate and pass their own self-tests
-- `pip install docket` works
+- `pip install docket-runtime` works
 - README has a working quickstart
 
 ### Phase 10: v1.0 release prep (estimated: 1 weekend)

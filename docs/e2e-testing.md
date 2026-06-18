@@ -70,7 +70,7 @@ docket --version
 Or from PyPI (once `v0.1.0` is published):
 
 ```bash
-pip install docket
+pip install docket-runtime
 docket --version
 ```
 

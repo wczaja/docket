@@ -8,7 +8,7 @@ Issues end to end; this document is for picking your own combination.
 ## Prerequisites
 
 ```bash
-pip install docket          # or: uv pip install docket
+pip install docket-runtime          # or: uv pip install docket-runtime
 
 export ANTHROPIC_API_KEY=...      # for llm_judge detectors (or OPENAI_API_KEY)
 export OPENAI_API_KEY=...         # required for clustering even when the
