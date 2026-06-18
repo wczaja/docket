@@ -5,10 +5,10 @@ once and the rest of the documentation reads cleanly.
 
 ## The cast
 
-- **User's agent** — the LLM agent whose traces are analyzed. agent-triage
+- **User's agent** — the LLM agent whose traces are analyzed. docket
   never runs it, instruments it, or stores its data; it reads the traces
   the agent already emits to an observability backend.
-- **Triage agent** — agent-triage's own pipeline (and, under `--agent`,
+- **Triage agent** — docket's own pipeline (and, under `--agent`,
   its planning harness). When docs say "the agent" ambiguously, they
   mean this one and will say so explicitly.
 
@@ -16,7 +16,7 @@ once and the rest of the documentation reads cleanly.
 
 - **Trace** — one end-to-end interaction of the user's agent, as a tree
   of OpenInference spans (LLM calls, tool calls, retrievals). Traces
-  live in *your* backend — Phoenix, Langfuse, or LangSmith; agent-triage
+  live in *your* backend — Phoenix, Langfuse, or LangSmith; docket
   fetches them read-only and normalizes every backend's shape to the
   same OpenInference model before anything else sees them.
 - **Window** — the `[since, until]` time range a run operates on.
@@ -25,7 +25,7 @@ once and the rest of the documentation reads cleanly.
 - **Annotation** — a classification written *back to the backend*
   (opt-in via `--annotate`), keyed by
   `(trace_id, run_id, rubric_version, mode_id)`. Annotations are the
-  only trace-side state agent-triage creates, which is what makes the
+  only trace-side state docket creates, which is what makes the
   runtime stateless: re-runs upsert rather than duplicate, and
   `--checkpoint` resumability is just "skip traces already annotated for
   this run_id".
@@ -55,7 +55,7 @@ once and the rest of the documentation reads cleanly.
   priority, labels). Drafts queue locally by default — *drafted is not
   posted*.
 - **Provenance** — machine-readable identity carried by every posted
-  issue, in two places: tracker labels (`agent-triage`, `mode:<id>`,
+  issue, in two places: tracker labels (`docket`, `mode:<id>`,
   `rubric:<name>@<version>`) and an HTML-comment JSON block at the end
   of the body. Both exist for **dedup**: the next run finds the existing
   issue, comments with only the new trace IDs if the cluster grew, and
@@ -87,7 +87,7 @@ once and the rest of the documentation reads cleanly.
 Nowhere new — that's the design's core constraint. Classifications live
 in your backend as annotations; issue identity lives in your tracker as
 labels + provenance; drafts awaiting review live as files under
-`~/.agent-triage/`. There is no agent-triage database, so there is
+`~/.docket/`. There is no docket database, so there is
 nothing to operate, back up, or migrate, and any number of runs (or
 `serve` daemons on disjoint windows) can coexist against the same
 backend.

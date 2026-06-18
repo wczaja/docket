@@ -10,11 +10,11 @@ from typing import Any
 
 import pytest
 
-from agent_triage.agent.subagents.drafter import draft_issues
-from agent_triage.errors import DetectionError
-from agent_triage.llm.base import ModelProvider
-from agent_triage.models.cluster import Cluster, ClusterStats
-from agent_triage.rubric.spec import Detection, Mode, Rubric, RubricMetadata, TriageConfig
+from docket.agent.subagents.drafter import draft_issues
+from docket.errors import DetectionError
+from docket.llm.base import ModelProvider
+from docket.models.cluster import Cluster, ClusterStats
+from docket.rubric.spec import Detection, Mode, Rubric, RubricMetadata, TriageConfig
 
 
 class _MockProvider(ModelProvider):
@@ -38,7 +38,7 @@ class _MockProvider(ModelProvider):
 
 def _rubric_with_mode(*, triage: TriageConfig | None = None) -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="testbench", version="0.1.0"),
         modes=[
@@ -79,8 +79,8 @@ async def test_draft_one_cluster_writes_two_files(tmp_path: Path) -> None:
     assert len(drafts) == 1
     draft = drafts[0]
     assert draft.title == "Hallucinated geographic facts"
-    assert "agent-triage:provenance" in draft.body
-    assert "agent-triage" in draft.labels
+    assert "docket:provenance" in draft.body
+    assert "docket" in draft.labels
     assert "mode:hallucination" in draft.labels
     assert "rubric:testbench@0.1.0" in draft.labels
 

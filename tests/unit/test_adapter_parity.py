@@ -14,13 +14,13 @@ upstream perturbation creeping in).
 
 import httpx
 
-from agent_triage.adapters.trace.langfuse import LangfuseAdapter
-from agent_triage.adapters.trace.langsmith import LangsmithAdapter
-from agent_triage.adapters.trace.phoenix import PhoenixAdapter
-from agent_triage.agent.subagents.clusterer import cluster_per_mode
-from agent_triage.llm.embeddings import EmbeddingProvider
-from agent_triage.models.classification import Classification
-from agent_triage.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
+from docket.adapters.trace.langfuse import LangfuseAdapter
+from docket.adapters.trace.langsmith import LangsmithAdapter
+from docket.adapters.trace.phoenix import PhoenixAdapter
+from docket.agent.subagents.clusterer import cluster_per_mode
+from docket.llm.embeddings import EmbeddingProvider
+from docket.models.classification import Classification
+from docket.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
 
 _TRACE_ID = "parity-trace-001"
 _USER_MSG = "What is the capital of France?"
@@ -270,7 +270,7 @@ class _FixedEmbeddingProvider(EmbeddingProvider):
 async def test_clusterer_cluster_ids_stable_under_fixed_embeddings() -> None:
     """Same classifications + same embedding vectors -> same cluster_id set."""
     rubric = Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="parity", version="0.1.0"),
         modes=[

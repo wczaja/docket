@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_triage.errors import RubricImportError, RubricValidationError
-from agent_triage.rubric.loader import load_rubric
+from docket.errors import RubricImportError, RubricValidationError
+from docket.rubric.loader import load_rubric
 
 
 def test_import_merges_modes_from_base(fixtures_dir: Path) -> None:
@@ -81,7 +81,7 @@ def test_loads_via_file_uri(fixtures_dir: Path) -> None:
 
 
 def test_loads_via_builtin_uri() -> None:
-    rubric = load_rubric("agent-triage.dev/builtin/agents/v1")
+    rubric = load_rubric("docket.dev/builtin/agents/v1")
     assert rubric.metadata.name == "agents-builtin"
 
 
@@ -89,7 +89,7 @@ def test_imports_with_only_imports_produces_modes(tmp_path: Path, fixtures_dir: 
     importer = tmp_path / "importer.yaml"
     base_path = (fixtures_dir / "rubrics" / "imports" / "base.yaml").resolve()
     importer.write_text(
-        "apiVersion: agent-triage.dev/v1\n"
+        "apiVersion: docket.dev/v1\n"
         "kind: Rubric\n"
         "metadata: {name: only-imports, version: '1'}\n"
         f"imports:\n  - file://{base_path}\n"
@@ -102,11 +102,11 @@ def test_imports_with_only_imports_produces_modes(tmp_path: Path, fixtures_dir: 
 def test_imports_resolving_to_empty(tmp_path: Path) -> None:
     empty = tmp_path / "empty.yaml"
     empty.write_text(
-        "apiVersion: agent-triage.dev/v1\nkind: Rubric\nmetadata: {name: empty, version: '1'}\n"
+        "apiVersion: docket.dev/v1\nkind: Rubric\nmetadata: {name: empty, version: '1'}\n"
     )
     importer = tmp_path / "importer.yaml"
     importer.write_text(
-        "apiVersion: agent-triage.dev/v1\n"
+        "apiVersion: docket.dev/v1\n"
         "kind: Rubric\n"
         "metadata: {name: importer-only, version: '1'}\n"
         "imports:\n  - file://./empty.yaml\n"

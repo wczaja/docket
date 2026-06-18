@@ -1,4 +1,4 @@
-# Using Linear with agent-triage
+# Using Linear with docket
 
 Phase 9 adds Linear as a second `Tracker`. Linear is GraphQL-only and
 SaaS-only (no self-hosted option), so the adapter speaks plain HTTP via
@@ -10,7 +10,7 @@ against a real Linear workspace when the maintainer's credentials are set.
 
 1. Sign in at <https://linear.app> and open **Settings → API → Personal
    API keys**.
-2. Click **Create key**, label it `agent-triage`, and copy the value — it's
+2. Click **Create key**, label it `docket`, and copy the value — it's
    only shown once. Linear keys are passed in the `Authorization` header
    **without** a `Bearer` prefix.
 3. Find your **team ID** (the UUID, not the team key like `AGT`). The
@@ -18,40 +18,40 @@ against a real Linear workspace when the maintainer's credentials are set.
    **Settings → API → Sample queries** which lists every team's ID. You
    can also fetch it via the GraphQL `viewer.teams` query.
 
-## 2. Configure agent-triage
+## 2. Configure docket
 
 CLI flags:
 
 ```bash
-agent-triage run \
+docket run \
   --backend phoenix \
   --phoenix-url http://localhost:6006 \
   --tracker linear \
   --linear-api-key "$LINEAR_API_KEY" \
   --linear-team "$LINEAR_TEAM_ID" \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 ```
 
-Or `agent-triage.yaml`:
+Or `docket.yaml`:
 
 ```yaml
 trace_backend:
   type: mcp
-  command: agent-triage-adapter-phoenix
+  command: docket-adapter-phoenix
   env:
     PHOENIX_URL: http://localhost:6006
 
 tracker:
   type: mcp
-  command: agent-triage-adapter-linear
+  command: docket-adapter-linear
   env:
     LINEAR_API_KEY: ${LINEAR_API_KEY}
     LINEAR_TEAM_ID: ${LINEAR_TEAM_ID}
     # Optional; defaults to https://api.linear.app/graphql:
     # LINEAR_ENDPOINT: https://api.linear.app/graphql
 
-rubric: agent-triage.dev/builtin/agents/v1
+rubric: docket.dev/builtin/agents/v1
 auto_post_threshold: never
 ```
 
@@ -69,7 +69,7 @@ auto_post_threshold: never
   for a `cluster_id` match. Match → comment on existing issue (or skip if
   no new members); no match → see auto-post / review below.
 - **Labels** — Linear labels are first-class workspace entities. The
-  adapter resolves the three label strings (`agent-triage`,
+  adapter resolves the three label strings (`docket`,
   `mode:<id>`, `rubric:<id>@<ver>`) to label IDs on first use, creates any
   missing ones via `issueLabelCreate`, and caches the mapping for the
   process lifetime.
@@ -86,7 +86,7 @@ auto_post_threshold: never
 - `tests/integration/test_linear_e2e.py` is gated on `--run-integration`
   plus `LINEAR_API_KEY` + `LINEAR_TEAM_ID`. It creates a test issue,
   re-runs to assert idempotent dedup, posts a comment on a grown cluster,
-  and leaves the issue in Linear labeled `agent-triage-test` for manual
+  and leaves the issue in Linear labeled `docket-test` for manual
   cleanup (Linear state transitions are workspace-specific and v1.0
   doesn't drive them).
 

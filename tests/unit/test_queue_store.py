@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from agent_triage.models.issue import IssueDraft, make_labels
-from agent_triage.queue_store import (
+from docket.models.issue import IssueDraft, make_labels
+from docket.queue_store import (
     POSTED_SUBDIR,
     clear_queue,
     list_queued_drafts,

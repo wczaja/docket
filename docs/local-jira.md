@@ -1,4 +1,4 @@
-# Using Jira with agent-triage
+# Using Jira with docket
 
 Phase 8 adds Jira as the first `Tracker`. The adapter speaks plain HTTP via
 `httpx` (no Atlassian SDK dependency) and supports both deployment styles:
@@ -17,7 +17,7 @@ The deployment is auto-detected from the hostname (anything ending in
 
 1. Sign in at <https://id.atlassian.com>.
 2. Visit **Manage account → Security → API tokens** and click **Create API
-   token**. Label it `agent-triage` and copy the value — it's only shown
+   token**. Label it `docket` and copy the value — it's only shown
    once.
 3. Note your **Atlassian account email** (the address you sign in with).
    Cloud's Basic-auth scheme uses `email:api_token` as the credential pair.
@@ -25,18 +25,18 @@ The deployment is auto-detected from the hostname (anything ending in
 ### Jira Data Center / Server
 
 1. In Jira, click your avatar → **Profile → Personal Access Tokens**.
-2. Click **Create token**, set a name (`agent-triage`) and an expiry. The
+2. Click **Create token**, set a name (`docket`) and an expiry. The
    token is only shown once.
 3. Make sure the user account has **Browse projects**, **Create issues**, and
    **Add comments** permissions on the target project.
 
-## 2. Configure agent-triage
+## 2. Configure docket
 
 You can pass credentials via CLI flags:
 
 ```bash
 # Cloud
-agent-triage run \
+docket run \
   --backend phoenix \
   --phoenix-url http://localhost:6006 \
   --tracker jira \
@@ -44,33 +44,33 @@ agent-triage run \
   --jira-project AGT \
   --jira-email "$JIRA_EMAIL" \
   --jira-api-token "$JIRA_API_TOKEN" \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 
 # Data Center
-agent-triage run \
+docket run \
   --backend phoenix \
   --phoenix-url http://localhost:6006 \
   --tracker jira \
   --jira-host https://jira.internal.example.com \
   --jira-project AGT \
   --jira-pat "$JIRA_PAT" \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 ```
 
-Or via `agent-triage.yaml`:
+Or via `docket.yaml`:
 
 ```yaml
 trace_backend:
   type: mcp
-  command: agent-triage-adapter-phoenix
+  command: docket-adapter-phoenix
   env:
     PHOENIX_URL: http://localhost:6006
 
 tracker:
   type: mcp
-  command: agent-triage-adapter-jira
+  command: docket-adapter-jira
   env:
     JIRA_HOST: https://example.atlassian.net
     JIRA_PROJECT: AGT
@@ -80,7 +80,7 @@ tracker:
     # JIRA_PAT: ${JIRA_PAT}
     # JIRA_DEPLOYMENT: datacenter   # only when auto-detection misfires
 
-rubric: agent-triage.dev/builtin/agents/v1
+rubric: docket.dev/builtin/agents/v1
 auto_post_threshold: never  # `critical` | `high` | `medium` | `low` | `never`
 ```
 
@@ -96,7 +96,7 @@ auto_post_threshold: never  # `critical` | `high` | `medium` | `low` | `never`
 ## 3. What lands where
 
 - **Dedup** (always on when a tracker is configured) — the pipeline queries
-  Jira by labels (`agent-triage`, `mode:<id>`, `rubric:<id>@<version>`) and
+  Jira by labels (`docket`, `mode:<id>`, `rubric:<id>@<version>`) and
   parses the embedded HTML provenance block to find a `cluster_id` match.
   - Match found + cluster has new traces → posts a comment listing the new
     trace IDs only.
@@ -106,7 +106,7 @@ auto_post_threshold: never  # `critical` | `high` | `medium` | `low` | `never`
   the config key `auto_post_threshold`) — when set above `never`, drafts
   whose cluster severity meets the threshold are posted automatically as
   new Jira issues. Lower-severity drafts stay in the local queue under
-  `~/.agent-triage/queued-issues/`.
+  `~/.docket/queued-issues/`.
 - **Review** (`--review`) — for each `needs_create` outcome, the operator's
   `$EDITOR` is launched on the draft markdown; on save, the title and
   Description section are re-parsed and the operator is asked to accept or
@@ -115,7 +115,7 @@ auto_post_threshold: never  # `critical` | `high` | `medium` | `low` | `never`
   y/n prompt is shown instead.
 - **Provenance** — every posted issue carries an HTML-comment provenance
   block at the end of its body
-  (`<!-- agent-triage:provenance {...} -->`) plus the standard label set,
+  (`<!-- docket:provenance {...} -->`) plus the standard label set,
   so future runs can dedup against it cleanly.
 
 ## 4. Verification
@@ -128,7 +128,7 @@ auto_post_threshold: never  # `critical` | `high` | `medium` | `low` | `never`
   for Cloud or `JIRA_PAT` for Data Center. The test creates an issue, posts
   a dedup comment, and cleans up by closing the issue (`update_issue` to
   `closed`-equivalent labels — Jira workflows are project-specific, so the
-  test issue is left in `Done` and labeled `agent-triage-test`).
+  test issue is left in `Done` and labeled `docket-test`).
 
 ## 5. Notes / Limitations
 
@@ -140,5 +140,5 @@ auto_post_threshold: never  # `critical` | `high` | `medium` | `low` | `never`
   Jira; `update_issue(state=...)` raises `TrackerError` rather than guess
   the workflow. Use Jira's UI / API to transition issues manually.
 - `LABELS` semantics — Jira sanitizes label values (no spaces; some
-  punctuation is stripped). agent-triage's label set is already safe under
-  this sanitization (`agent-triage`, `mode:<id>`, `rubric:<id>@<ver>`).
+  punctuation is stripped). docket's label set is already safe under
+  this sanitization (`docket`, `mode:<id>`, `rubric:<id>@<ver>`).

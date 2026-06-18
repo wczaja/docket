@@ -8,14 +8,14 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_triage.adapters.base import TraceBackend
-from agent_triage.agent.triage import compute_run_id, run_triage_pipeline
-from agent_triage.errors import BudgetExceededError, CredentialError
-from agent_triage.llm.base import ModelProvider
-from agent_triage.llm.embeddings import EmbeddingProvider
-from agent_triage.models.classification import Annotation, Classification
-from agent_triage.models.trace import OpenInferenceTrace, Span
-from agent_triage.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
+from docket.adapters.base import TraceBackend
+from docket.agent.triage import compute_run_id, run_triage_pipeline
+from docket.errors import BudgetExceededError, CredentialError
+from docket.llm.base import ModelProvider
+from docket.llm.embeddings import EmbeddingProvider
+from docket.models.classification import Annotation, Classification
+from docket.models.trace import OpenInferenceTrace, Span
+from docket.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
 
 
 class _FakeBackend(TraceBackend):
@@ -71,7 +71,7 @@ class _MockEmbeddingProvider(EmbeddingProvider):
 
 def _rubric() -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="testbench", version="0.1.0"),
         modes=[
@@ -178,7 +178,7 @@ async def test_run_triage_pipeline_produces_clusters_and_drafts(tmp_path: Path) 
     file_suffixes = {f.suffix for f in tmp_path.iterdir()}  # noqa: ASYNC240
     assert ".json" in file_suffixes
     assert ".md" in file_suffixes
-    assert "# agent-triage run" in result.report_markdown
+    assert "# docket run" in result.report_markdown
     assert "## Clusters" in result.report_markdown
 
 
@@ -530,7 +530,7 @@ class _ScriptedClassifier:
 
 async def test_checkpoint_excludes_all_error_traces_from_sentinels(tmp_path: Path) -> None:
     backend = _FakeBackend({tid: _trace(tid, "hi") for tid in ("t-good", "t-bad")})
-    with patch("agent_triage.agent.triage.Classifier", _ScriptedClassifier):
+    with patch("docket.agent.triage.Classifier", _ScriptedClassifier):
         await run_triage_pipeline(
             backend=backend,
             rubric=_rubric(),
@@ -610,7 +610,7 @@ async def test_no_fetch_failures_means_no_report_section(tmp_path: Path) -> None
 
 def _judge_rubric() -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="testbench", version="0.1.0"),
         modes=[

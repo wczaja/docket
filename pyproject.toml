@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agent-triage"
+name = "docket"
 version = "1.0.0"
 description = "Observability-platform-agnostic triage runtime for LLM agent traces"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-authors = [{ name = "agent-triage maintainers" }]
+authors = [{ name = "docket maintainers" }]
 keywords = [
     "llm",
     "agents",
@@ -57,11 +57,11 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/wczaja/agent-triage"
-Repository = "https://github.com/wczaja/agent-triage"
-Issues = "https://github.com/wczaja/agent-triage/issues"
-Documentation = "https://github.com/wczaja/agent-triage/blob/main/docs/quickstart.md"
-Changelog = "https://github.com/wczaja/agent-triage/releases"
+Homepage = "https://github.com/wczaja/docket"
+Repository = "https://github.com/wczaja/docket"
+Issues = "https://github.com/wczaja/docket/issues"
+Documentation = "https://github.com/wczaja/docket/blob/main/docs/quickstart.md"
+Changelog = "https://github.com/wczaja/docket/releases"
 
 [project.optional-dependencies]
 dev = [
@@ -76,22 +76,22 @@ dev = [
 ]
 
 [project.scripts]
-agent-triage = "agent_triage.cli:main"
-agent-triage-adapter-phoenix = "agent_triage.mcp_servers.adapter_phoenix:cli_main"
-agent-triage-adapter-langfuse = "agent_triage.mcp_servers.adapter_langfuse:cli_main"
-agent-triage-adapter-langsmith = "agent_triage.mcp_servers.adapter_langsmith:cli_main"
-agent-triage-adapter-jira = "agent_triage.mcp_servers.adapter_jira:cli_main"
-agent-triage-adapter-linear = "agent_triage.mcp_servers.adapter_linear:cli_main"
-agent-triage-adapter-github = "agent_triage.mcp_servers.adapter_github:cli_main"
+docket = "docket.cli:main"
+docket-adapter-phoenix = "docket.mcp_servers.adapter_phoenix:cli_main"
+docket-adapter-langfuse = "docket.mcp_servers.adapter_langfuse:cli_main"
+docket-adapter-langsmith = "docket.mcp_servers.adapter_langsmith:cli_main"
+docket-adapter-jira = "docket.mcp_servers.adapter_jira:cli_main"
+docket-adapter-linear = "docket.mcp_servers.adapter_linear:cli_main"
+docket-adapter-github = "docket.mcp_servers.adapter_github:cli_main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["agent_triage"]
+packages = ["docket"]
 
 [tool.hatch.build]
 include = [
-    "agent_triage/**/*.py",
-    "agent_triage/**/*.json",
-    "agent_triage/**/*.yaml",
+    "docket/**/*.py",
+    "docket/**/*.json",
+    "docket/**/*.yaml",
 ]
 
 [tool.ruff]
@@ -142,22 +142,22 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = [
-    "--cov=agent_triage.rubric",
-    "--cov=agent_triage.detectors",
-    "--cov=agent_triage.models",
-    "--cov=agent_triage.llm",
-    "--cov=agent_triage.self_test",
-    "--cov=agent_triage.adapters",
-    "--cov=agent_triage.mcp_servers",
-    "--cov=agent_triage.runtime",
-    "--cov=agent_triage.agent",
-    "--cov=agent_triage.cli",
-    "--cov=agent_triage.config",
-    "--cov=agent_triage.errors",
-    "--cov=agent_triage.observability",
-    "--cov=agent_triage.sampling",
-    "--cov=agent_triage.cost",
-    "--cov=agent_triage.queue_store",
+    "--cov=docket.rubric",
+    "--cov=docket.detectors",
+    "--cov=docket.models",
+    "--cov=docket.llm",
+    "--cov=docket.self_test",
+    "--cov=docket.adapters",
+    "--cov=docket.mcp_servers",
+    "--cov=docket.runtime",
+    "--cov=docket.agent",
+    "--cov=docket.cli",
+    "--cov=docket.config",
+    "--cov=docket.errors",
+    "--cov=docket.observability",
+    "--cov=docket.sampling",
+    "--cov=docket.cost",
+    "--cov=docket.queue_store",
     "--cov-report=term-missing",
     "--cov-fail-under=90",
 ]
@@ -165,22 +165,22 @@ addopts = [
 [tool.coverage.run]
 branch = false
 source = [
-    "agent_triage.rubric",
-    "agent_triage.detectors",
-    "agent_triage.models",
-    "agent_triage.llm",
-    "agent_triage.self_test",
-    "agent_triage.adapters",
-    "agent_triage.mcp_servers",
-    "agent_triage.runtime",
-    "agent_triage.agent",
-    "agent_triage.cli",
-    "agent_triage.config",
-    "agent_triage.errors",
-    "agent_triage.observability",
-    "agent_triage.sampling",
-    "agent_triage.cost",
-    "agent_triage.queue_store",
+    "docket.rubric",
+    "docket.detectors",
+    "docket.models",
+    "docket.llm",
+    "docket.self_test",
+    "docket.adapters",
+    "docket.mcp_servers",
+    "docket.runtime",
+    "docket.agent",
+    "docket.cli",
+    "docket.config",
+    "docket.errors",
+    "docket.observability",
+    "docket.sampling",
+    "docket.cost",
+    "docket.queue_store",
 ]
 
 [tool.coverage.report]

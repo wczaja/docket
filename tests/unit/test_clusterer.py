@@ -8,12 +8,12 @@ import logging
 
 import pytest
 
-from agent_triage.agent.subagents import clusterer as clusterer_mod
-from agent_triage.agent.subagents.clusterer import cluster_per_mode
-from agent_triage.llm.embeddings import EmbeddingProvider
-from agent_triage.models.classification import Classification
-from agent_triage.models.trace import OpenInferenceTrace, Span
-from agent_triage.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
+from docket.agent.subagents import clusterer as clusterer_mod
+from docket.agent.subagents.clusterer import cluster_per_mode
+from docket.llm.embeddings import EmbeddingProvider
+from docket.models.classification import Classification
+from docket.models.trace import OpenInferenceTrace, Span
+from docket.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
 
 
 class _MockEmbeddingProvider(EmbeddingProvider):
@@ -41,7 +41,7 @@ class _MockEmbeddingProvider(EmbeddingProvider):
 
 def _rubric(modes: list[Mode], min_cluster_size: int = 3, threshold: float = 0.82) -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="cluster-test", version="0.0.1"),
         modes=modes,
@@ -318,7 +318,7 @@ async def test_embedding_count_mismatch_logs_warning(caplog: pytest.LogCaptureFi
     classifications = [_classification(f"t-{i}", "leak", excerpt=f"text{i}") for i in range(3)]
     provider = _MismatchEmbeddingProvider()
 
-    with caplog.at_level(logging.WARNING, logger="agent_triage.agent.subagents.clusterer"):
+    with caplog.at_level(logging.WARNING, logger="docket.agent.subagents.clusterer"):
         clusters = await cluster_per_mode(
             classifications,
             rubric=rubric,

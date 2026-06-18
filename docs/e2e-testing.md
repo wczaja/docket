@@ -1,6 +1,6 @@
 # End-to-end testing guide
 
-This guide walks through a full end-to-end test of `agent-triage` from
+This guide walks through a full end-to-end test of `docket` from
 the terminal. The example uses **LangSmith** as the trace backend and
 **GitHub Issues** as the tracker (the combination explicitly called out
 in the design), but every step has analogues for Phoenix / Langfuse and
@@ -10,7 +10,7 @@ By the end, you'll have:
 
 1. A LangSmith project populated with 20 synthetic traces (10 clean,
    10 seeded with known failure modes).
-2. A GitHub repository that receives `agent-triage`'s drafted issues.
+2. A GitHub repository that receives `docket`'s drafted issues.
 3. Verified the dedup loop is idempotent across re-runs.
 4. Verified the `--review` flow works end to end.
 
@@ -21,7 +21,7 @@ The whole thing takes ~15 minutes once you have the credentials.
 ## Do we need a trace simulator?
 
 **Yes — and one already ships with the project.**
-`agent_triage._acceptance` produces 20 deterministic synthetic traces
+`docket._acceptance` produces 20 deterministic synthetic traces
 (10 clean, 10 with seeded failures across `hallucination`,
 `infinite-loop`, `refusal-leakage`, `unsafe-tool-call`,
 `premature-termination`). Two posting scripts then push these into a
@@ -56,29 +56,29 @@ python --version       # >= 3.11
 
 ---
 
-## 1. Install `agent-triage`
+## 1. Install `docket`
 
 From a development checkout:
 
 ```bash
-git clone https://github.com/wczaja/agent-triage.git
-cd agent-triage
+git clone https://github.com/wczaja/docket.git
+cd docket
 uv pip install -e ".[dev]"     # or:  pip install -e ".[dev]"
-agent-triage --version
+docket --version
 ```
 
 Or from PyPI (once `v0.1.0` is published):
 
 ```bash
-pip install agent-triage
-agent-triage --version
+pip install docket
+docket --version
 ```
 
 Confirm the CLI is discoverable:
 
 ```bash
-agent-triage --help
-agent-triage run --help | head -20
+docket --help
+docket run --help | head -20
 ```
 
 ---
@@ -89,7 +89,7 @@ agent-triage run --help | head -20
 
 1. Sign in at <https://smith.langchain.com>.
 2. Top-right avatar → **Settings → API Keys**.
-3. **Create API Key**, label it `agent-triage-e2e`, copy the value.
+3. **Create API Key**, label it `docket-e2e`, copy the value.
    Keys start with `lsv2_pt_` or `ls__`.
 
 ### 2.2 Create a project
@@ -98,14 +98,14 @@ Projects are LangSmith's term for what other backends call sessions or
 workspaces. Each trace belongs to exactly one project.
 
 1. Left nav → **Tracing Projects** → **+ New Project**.
-2. Name it `agent-triage-e2e`. Description and tags are optional.
+2. Name it `docket-e2e`. Description and tags are optional.
 3. Open the project — it should show zero traces.
 
 ### 2.3 Export credentials
 
 ```bash
 export LANGSMITH_API_KEY="lsv2_pt_..."
-export LANGSMITH_PROJECT="agent-triage-e2e"
+export LANGSMITH_PROJECT="docket-e2e"
 ```
 
 > **Alternative backends:** if you'd rather use Phoenix
@@ -152,8 +152,8 @@ Use an existing repo or create one specifically for triage drafts so
 they don't clutter a real backlog:
 
 ```bash
-# Via the GitHub UI: create a new repository called `agent-triage-test`
-# (private is fine — agent-triage only needs API access, not public).
+# Via the GitHub UI: create a new repository called `docket-test`
+# (private is fine — docket only needs API access, not public).
 ```
 
 ### 4.2 Create a personal access token
@@ -161,9 +161,9 @@ they don't clutter a real backlog:
 Fine-grained token (recommended):
 
 1. <https://github.com/settings/tokens?type=beta> → **Generate new token**.
-2. Name: `agent-triage-e2e`. Expiry: 7 days for testing.
+2. Name: `docket-e2e`. Expiry: 7 days for testing.
 3. **Repository access** → **Only select repositories** → pick
-   `agent-triage-test`.
+   `docket-test`.
 4. **Permissions → Repository**:
    - **Issues**: Read and write
    - **Metadata**: Read-only (mandatory)
@@ -177,7 +177,7 @@ Classic token also works — give it the `repo` scope and copy the
 ```bash
 export GITHUB_TOKEN="github_pat_..."     # or ghp_...
 export GITHUB_OWNER="your-gh-username"   # or your org name
-export GITHUB_REPO="agent-triage-test"
+export GITHUB_REPO="docket-test"
 ```
 
 > **Alternative trackers:** for Jira or Linear, see `docs/local-jira.md`
@@ -207,11 +207,11 @@ Start with a read-only run to verify the wiring before posting
 anything to GitHub. Omit `--tracker` so drafts queue locally only:
 
 ```bash
-agent-triage run \
+docket run \
   --backend langsmith \
   --langsmith-api-key "$LANGSMITH_API_KEY" \
   --langsmith-project "$LANGSMITH_PROJECT" \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 ```
 
@@ -224,9 +224,9 @@ Classifying 20 traces against agents-builtin v1.0.0 ...
 Clustering ...
   formed 5 clusters across 5 modes
 Drafting ...
-  drafted 5 issues into ~/.agent-triage/queued-issues/<run-id>/
+  drafted 5 issues into ~/.docket/queued-issues/<run-id>/
 Report:
-# agent-triage run `<run-id>`
+# docket run `<run-id>`
 - Rubric: agents-builtin v1.0.0
 - Window: ...
 - Traces processed: 20
@@ -242,18 +242,18 @@ Report:
   with 2 positives per mode on the 20-trace fixture.
 - **Cluster count**: usually 5 (one per seeded mode), depending on
   the embedding-clusterer's threshold.
-- **Queue**: `ls ~/.agent-triage/queued-issues/<run-id>/` should
+- **Queue**: `ls ~/.docket/queued-issues/<run-id>/` should
   list one `.json` + one `.md` per cluster.
 
 Open one of the `.md` drafts:
 
 ```bash
-cat ~/.agent-triage/queued-issues/<run-id>/cluster-*.md | head -50
+cat ~/.docket/queued-issues/<run-id>/cluster-*.md | head -50
 ```
 
 It should have a title (LLM-generated, depends on the fixture trace),
 a metadata block, a `## Description` section, and an
-`agent-triage:provenance` HTML comment at the bottom.
+`docket:provenance` HTML comment at the bottom.
 
 ---
 
@@ -264,7 +264,7 @@ open issues. With no `--auto-post-threshold`, this is dedup-only —
 nothing gets created in GitHub yet, but the runtime checks for matches:
 
 ```bash
-agent-triage run \
+docket run \
   --backend langsmith \
   --langsmith-api-key "$LANGSMITH_API_KEY" \
   --langsmith-project "$LANGSMITH_PROJECT" \
@@ -272,7 +272,7 @@ agent-triage run \
   --github-token "$GITHUB_TOKEN" \
   --github-owner "$GITHUB_OWNER" \
   --github-repo "$GITHUB_REPO" \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 ```
 
@@ -296,10 +296,10 @@ Now ask the runtime to post any draft whose cluster severity is
 `premature-termination` / `bad-handoff` as `high`:
 
 ```bash
-agent-triage run \
+docket run \
   --backend langsmith ... \
   --tracker github ... \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --auto-post-threshold high \
   --since 1h
 ```
@@ -313,8 +313,8 @@ agent-triage run \
   with:
   - Titles matching the cluster summaries.
   - Bodies containing the cluster description plus an HTML
-    `agent-triage:provenance` comment at the end.
-  - Labels: `agent-triage`, `mode:<id>`,
+    `docket:provenance` comment at the end.
+  - Labels: `docket`, `mode:<id>`,
     `rubric:agents-builtin@1.0.0`.
 
 If `refusal-leakage` had severity `medium`, its cluster stays in the
@@ -328,10 +328,10 @@ local queue (below the `high` threshold). Drop the threshold to
 Run the **same command** again:
 
 ```bash
-agent-triage run \
+docket run \
   --backend langsmith ... \
   --tracker github ... \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --auto-post-threshold high \
   --since 1h
 ```
@@ -366,10 +366,10 @@ Now re-run the triage with the *same* time window so it picks up both
 batches:
 
 ```bash
-agent-triage run \
+docket run \
   --backend langsmith ... \
   --tracker github ... \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --auto-post-threshold high \
   --since 2h
 ```
@@ -390,10 +390,10 @@ Reset by lowering the threshold so a fresh cluster lands in
 `needs_create` again, then add `--review`:
 
 ```bash
-EDITOR=vim agent-triage run \
+EDITOR=vim docket run \
   --backend langsmith ... \
   --tracker github ... \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --review \
   --since 1h
 ```
@@ -413,7 +413,7 @@ draft to stdout and skips the editor step but still prompts y/N.
 
 ## 12. Try the `--agent` mode
 
-The default `agent-triage run` path is a deterministic Python pipeline:
+The default `docket run` path is a deterministic Python pipeline:
 the stages run in a fixed order, no LLM-driven planning, no extra LLM
 calls beyond the detectors and the drafter. That's the recommended
 path for batch / CI / production use.
@@ -464,11 +464,11 @@ LangSmith and the LLM provider are already configured from sections 2
 and 5. Add `--agent` to the read-only command from section 6:
 
 ```bash
-agent-triage run \
+docket run \
   --backend langsmith \
   --langsmith-api-key "$LANGSMITH_API_KEY" \
   --langsmith-project "$LANGSMITH_PROJECT" \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h \
   --agent
 ```
@@ -498,14 +498,14 @@ I'll run the full workflow. Starting with list_traces.
 
 → draft_issues_tool({})
 ← draft_issues_tool generated 5 drafts and queued them to
-  ~/.agent-triage/queued-issues/<run-id>/.
+  ~/.docket/queued-issues/<run-id>/.
 
 → write_report({})
 ← write_report stored the markdown summary at /report.md (1.2 KB).
 
 The workflow is complete. Final report:
 
-# agent-triage run `<run-id>`
+# docket run `<run-id>`
 - Rubric: agents-builtin v1.0.0
 ...
 ```
@@ -520,16 +520,16 @@ Run the deterministic pipeline (same flags, no `--agent`) against the
 same window and diff the queued drafts:
 
 ```bash
-agent-triage run \
+docket run \
   --backend langsmith ... \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 # note the queue dir from the output:
-# "drafted 5 issues into ~/.agent-triage/queued-issues/<run-id>/"
+# "drafted 5 issues into ~/.docket/queued-issues/<run-id>/"
 
-agent-triage run \
+docket run \
   --backend langsmith ... \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h \
   --agent
 # note the second queue dir
@@ -539,8 +539,8 @@ Compare:
 
 ```bash
 diff -r \
-  ~/.agent-triage/queued-issues/<deterministic-run-id>/ \
-  ~/.agent-triage/queued-issues/<agent-run-id>/
+  ~/.docket/queued-issues/<deterministic-run-id>/ \
+  ~/.docket/queued-issues/<agent-run-id>/
 ```
 
 The titles and bodies are LLM-drafted, so they won't match
@@ -558,7 +558,7 @@ reasoning over a noisier pipeline), call `build_triage_agent` directly
 in Python:
 
 ```python
-from agent_triage.agent.deep_agent import build_triage_agent
+from docket.agent.deep_agent import build_triage_agent
 
 agent, state = build_triage_agent(
     backend=...,
@@ -600,7 +600,7 @@ After testing, close the GitHub issues:
 
 ```bash
 # Manually via the UI, or:
-gh issue list --repo "$GITHUB_OWNER/$GITHUB_REPO" --label agent-triage \
+gh issue list --repo "$GITHUB_OWNER/$GITHUB_REPO" --label docket \
   --json number --jq '.[].number' \
   | xargs -I{} gh issue close --repo "$GITHUB_OWNER/$GITHUB_REPO" {}
 ```
@@ -687,6 +687,6 @@ Things this guide does **not** cover:
 - Annotation writeback (`--annotate`). The fixture's clean / failed
   classifications are reliable, but writing annotations back to
   LangSmith uses the feedback API which the gated unit tests cover.
-- Self-test (`agent-triage self-test`) on your own rubric. Run it
+- Self-test (`docket self-test`) on your own rubric. Run it
   after editing any `llm_judge` mode in a custom rubric to confirm
   the examples still classify correctly.

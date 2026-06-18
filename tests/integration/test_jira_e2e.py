@@ -12,7 +12,7 @@ Gated four ways:
 The test creates an issue against the configured project, posts a dedup
 comment that ought to be a no-op on a second run, then exercises the
 "new member added" comment path. It leaves the test issue in place (labeled
-`agent-triage-test`) so the maintainer can clean it up manually — Jira
+`docket-test`) so the maintainer can clean it up manually — Jira
 workflows are project-specific, so the adapter doesn't attempt to close
 issues automatically.
 """
@@ -22,9 +22,9 @@ import uuid
 
 import pytest
 
-from agent_triage.adapters.tracker.jira import JiraAdapter
-from agent_triage.agent.subagents.poster import dedup_drafts
-from agent_triage.models.issue import IssueDraft, make_labels
+from docket.adapters.tracker.jira import JiraAdapter
+from docket.agent.subagents.poster import dedup_drafts
+from docket.models.issue import IssueDraft, make_labels
 
 pytestmark = pytest.mark.integration
 
@@ -50,9 +50,9 @@ def jira_adapter() -> JiraAdapter:
 
 
 def _draft_for_test(*, cluster_id: str, members: list[str]) -> IssueDraft:
-    """A throwaway draft tagged with `agent-triage-test` for easy cleanup."""
+    """A throwaway draft tagged with `docket-test` for easy cleanup."""
     mode_id = f"e2e-mode-{cluster_id}"
-    rubric_version = "agent-triage-e2e@0.0.0"
+    rubric_version = "docket-e2e@0.0.0"
     return IssueDraft(
         cluster_id=cluster_id,
         mode_id=mode_id,
@@ -61,10 +61,10 @@ def _draft_for_test(*, cluster_id: str, members: list[str]) -> IssueDraft:
         severity="medium",
         representative_trace_id=members[0],
         member_trace_ids=members,
-        title=f"agent-triage e2e test ({cluster_id})",
-        body="This is an automated test issue created by agent-triage's gated E2E test.\n\n"
+        title=f"docket e2e test ({cluster_id})",
+        body="This is an automated test issue created by docket's gated E2E test.\n\n"
         "It is safe to delete.",
-        labels=[*make_labels(mode_id, rubric_version), "agent-triage-test"],
+        labels=[*make_labels(mode_id, rubric_version), "docket-test"],
     )
 
 

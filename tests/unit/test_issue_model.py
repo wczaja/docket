@@ -1,6 +1,6 @@
 import json
 
-from agent_triage.models.issue import (
+from docket.models.issue import (
     Issue,
     IssueDraft,
     IssuePatch,
@@ -18,16 +18,16 @@ def test_provenance_html_comment_is_parseable() -> None:
         run_id="r-1",
     )
     comment = prov.to_html_comment()
-    assert comment.startswith("<!-- agent-triage:provenance ")
+    assert comment.startswith("<!-- docket:provenance ")
     assert comment.endswith(" -->")
-    body = comment[len("<!-- agent-triage:provenance ") : -len(" -->")]
+    body = comment[len("<!-- docket:provenance ") : -len(" -->")]
     parsed = json.loads(body)
     assert parsed["cluster_id"] == "abc123"
 
 
 def test_make_labels_includes_required_three() -> None:
     labels = make_labels("hallucination", "agents-builtin@1.0.0")
-    assert "agent-triage" in labels
+    assert "docket" in labels
     assert "mode:hallucination" in labels
     assert "rubric:agents-builtin@1.0.0" in labels
 
@@ -160,7 +160,7 @@ def test_provenance_caps_member_trace_ids_at_100_with_flag() -> None:
         member_trace_ids=members,
     )
     comment = prov.to_html_comment()
-    payload = json.loads(comment[len("<!-- agent-triage:provenance ") : -len(" -->")])
+    payload = json.loads(comment[len("<!-- docket:provenance ") : -len(" -->")])
     assert len(payload["member_trace_ids"]) == 100
     assert payload["member_trace_ids"] == members[:100]
     assert payload["member_trace_ids_truncated"] is True
@@ -180,7 +180,7 @@ def test_provenance_under_cap_has_no_truncation_flag() -> None:
         member_trace_ids=["t-1", "t-2"],
     )
     comment = prov.to_html_comment()
-    payload = json.loads(comment[len("<!-- agent-triage:provenance ") : -len(" -->")])
+    payload = json.loads(comment[len("<!-- docket:provenance ") : -len(" -->")])
     assert "member_trace_ids_truncated" not in payload
     assert IssueProvenance.parse_from_body(f"body\n\n{comment}") == prov
 
@@ -190,12 +190,12 @@ def test_parse_from_body_returns_none_when_no_comment() -> None:
 
 
 def test_parse_from_body_returns_none_when_payload_is_not_json() -> None:
-    bad = "before <!-- agent-triage:provenance not_json{} --> after"
+    bad = "before <!-- docket:provenance not_json{} --> after"
     assert IssueProvenance.parse_from_body(bad) is None
 
 
 def test_parse_from_body_returns_none_when_payload_is_json_but_wrong_shape() -> None:
-    bad = 'before <!-- agent-triage:provenance {"missing_required": true} --> after'
+    bad = 'before <!-- docket:provenance {"missing_required": true} --> after'
     assert IssueProvenance.parse_from_body(bad) is None
 
 
@@ -206,7 +206,7 @@ def test_issue_value_type_carries_state_and_url() -> None:
         url="https://example.atlassian.net/browse/AGT-1",
         title="existing",
         body="existing body",
-        labels=["agent-triage"],
+        labels=["docket"],
         state="open",
     )
     assert issue.state == "open"

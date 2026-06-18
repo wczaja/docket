@@ -1,4 +1,4 @@
-apiVersion: agent-triage.dev/v99
+apiVersion: docket.dev/v99
 kind: Rubric
 metadata:
   name: future

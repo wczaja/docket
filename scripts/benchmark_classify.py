@@ -24,13 +24,13 @@ import random
 import time
 from typing import Any
 
-from agent_triage.agent.subagents.classifier import Classifier
-from agent_triage.cost import estimate_cost, known_models
-from agent_triage.llm.base import ModelProvider
-from agent_triage.models.trace import OpenInferenceTrace, Span
-from agent_triage.rubric.loader import load_rubric
+from docket.agent.subagents.classifier import Classifier
+from docket.cost import estimate_cost, known_models
+from docket.llm.base import ModelProvider
+from docket.models.trace import OpenInferenceTrace, Span
+from docket.rubric.loader import load_rubric
 
-RUBRIC_URI = "agent-triage.dev/builtin/agents/v1"
+RUBRIC_URI = "docket.dev/builtin/agents/v1"
 
 _FAILURE_SNIPPETS = [
     "The capital of Atlantis is Poseidon City, founded in 1842.",
@@ -125,7 +125,7 @@ async def run_benchmark(args: argparse.Namespace) -> None:
 
     provider: ModelProvider
     if args.live:
-        from agent_triage.llm import DEFAULT_ANTHROPIC_MODEL, build_provider
+        from docket.llm import DEFAULT_ANTHROPIC_MODEL, build_provider
 
         provider = build_provider(f"anthropic:{args.model or DEFAULT_ANTHROPIC_MODEL}")
     else:

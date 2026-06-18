@@ -1,10 +1,10 @@
-from agent_triage.errors import (
-    AgentTriageError,
+from docket.errors import (
     BackendError,
     BudgetExceededError,
     ConfigError,
     CredentialError,
     DetectionError,
+    DocketError,
     RubricError,
     RubricImportError,
     RubricValidationError,
@@ -24,7 +24,7 @@ def test_all_inherit_from_base() -> None:
         TrackerError,
         BudgetExceededError,
     ):
-        assert issubclass(cls, AgentTriageError)
+        assert issubclass(cls, DocketError)
 
 
 def test_rubric_validation_is_a_rubric_error() -> None:

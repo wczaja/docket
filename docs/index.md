@@ -1,4 +1,4 @@
-# agent-triage documentation
+# docket documentation
 
 An observability-platform-agnostic triage runtime for LLM agent traces:
 it reads traces from the backend you already run (Phoenix, Langfuse,
@@ -32,13 +32,13 @@ Testing against live services: [E2E testing](e2e-testing.md).
 
 ## Operating it
 
-- `agent-triage run --since 1h` — one-shot pipeline; add `--dry-run` to
+- `docket run --since 1h` — one-shot pipeline; add `--dry-run` to
   price a window first, `--review` for editor-based draft review,
   `--sample N` for very large windows.
-- `agent-triage serve --interval 1h` — daemon mode; tiles consecutive
+- `docket serve --interval 1h` — daemon mode; tiles consecutive
   windows with no gaps and retries failed windows. Equivalent to cron +
   `run`, with window bookkeeping handled for you.
-- `agent-triage validate <rubric>` / `agent-triage self-test <rubric>` —
+- `docket validate <rubric>` / `docket self-test <rubric>` —
   schema validation and example-based smoke tests for rubrics.
 
 ## Project

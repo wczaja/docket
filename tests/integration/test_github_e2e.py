@@ -20,9 +20,9 @@ import uuid
 
 import pytest
 
-from agent_triage.adapters.tracker.github import GitHubAdapter
-from agent_triage.agent.subagents.poster import dedup_drafts
-from agent_triage.models.issue import IssueDraft, IssuePatch, make_labels
+from docket.adapters.tracker.github import GitHubAdapter
+from docket.agent.subagents.poster import dedup_drafts
+from docket.models.issue import IssueDraft, IssuePatch, make_labels
 
 pytestmark = pytest.mark.integration
 
@@ -39,7 +39,7 @@ def github_adapter() -> GitHubAdapter:
 
 def _draft_for_test(*, cluster_id: str, members: list[str]) -> IssueDraft:
     mode_id = f"e2e-mode-{cluster_id}"
-    rubric_version = "agent-triage-e2e@0.0.0"
+    rubric_version = "docket-e2e@0.0.0"
     return IssueDraft(
         cluster_id=cluster_id,
         mode_id=mode_id,
@@ -48,10 +48,10 @@ def _draft_for_test(*, cluster_id: str, members: list[str]) -> IssueDraft:
         severity="medium",
         representative_trace_id=members[0],
         member_trace_ids=members,
-        title=f"agent-triage e2e test ({cluster_id})",
-        body="This is an automated test issue created by agent-triage's gated "
+        title=f"docket e2e test ({cluster_id})",
+        body="This is an automated test issue created by docket's gated "
         "E2E test. It is safe to delete.",
-        labels=[*make_labels(mode_id, rubric_version), "agent-triage-test"],
+        labels=[*make_labels(mode_id, rubric_version), "docket-test"],
     )
 
 

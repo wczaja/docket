@@ -10,15 +10,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from agent_triage.adapters.base import TraceBackend
-from agent_triage.agent.triage import run_triage_pipeline
-from agent_triage.detectors.base import Detector
-from agent_triage.errors import DetectionError
-from agent_triage.llm.base import ModelProvider
-from agent_triage.llm.embeddings import EmbeddingProvider
-from agent_triage.models.classification import Annotation
-from agent_triage.models.trace import OpenInferenceTrace, Span, TraceLike, Verdict
-from agent_triage.rubric.spec import Detection, Mode, Rubric, RubricMetadata
+from docket.adapters.base import TraceBackend
+from docket.agent.triage import run_triage_pipeline
+from docket.detectors.base import Detector
+from docket.errors import DetectionError
+from docket.llm.base import ModelProvider
+from docket.llm.embeddings import EmbeddingProvider
+from docket.models.classification import Annotation
+from docket.models.trace import OpenInferenceTrace, Span, TraceLike, Verdict
+from docket.rubric.spec import Detection, Mode, Rubric, RubricMetadata
 
 
 class _FakeBackend(TraceBackend):
@@ -101,7 +101,7 @@ def _trace(trace_id: str) -> OpenInferenceTrace:
 
 def _rubric() -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="failure-injection", version="0.1.0"),
         modes=[
@@ -132,7 +132,7 @@ async def test_classifier_failure_on_three_traces_does_not_abort_run(
     # We do this by wrapping run_triage_pipeline's Classifier instantiation
     # via patching get_detector to return our failing detector for type=regex.
     failing = _FailOnSpecificTraces(fail_ids)
-    from agent_triage import detectors as detectors_module
+    from docket import detectors as detectors_module
 
     real_get = detectors_module.get_detector
 
@@ -149,7 +149,7 @@ async def test_classifier_failure_on_three_traces_does_not_abort_run(
     until = datetime(2026, 5, 22, 1, 0, 0, tzinfo=UTC)
 
     with patch(
-        "agent_triage.agent.subagents.classifier.get_detector",
+        "docket.agent.subagents.classifier.get_detector",
         side_effect=fake_get,
     ):
         result = await run_triage_pipeline(
@@ -189,7 +189,7 @@ def test_failure_injection_uses_the_real_classifier() -> None:
     to a small enough number that the unit test doesn't time out under default
     backoff. The integration knob the test cares about is `max_retries=3` at
     Classifier construction time, which is the design §4.4 default."""
-    from agent_triage.agent.subagents.classifier import Classifier
+    from docket.agent.subagents.classifier import Classifier
 
     classifier = Classifier(_MockLLMProvider())
     # The pipeline constructs the Classifier with default kwargs; verify

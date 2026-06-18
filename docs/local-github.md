@@ -1,4 +1,4 @@
-# Using GitHub Issues with agent-triage
+# Using GitHub Issues with docket
 
 GitHub Issues is the simplest of the three tracker surfaces in v1.0:
 
@@ -20,10 +20,10 @@ because they scope to specific repositories.
 ### Fine-grained PAT (recommended)
 
 1. Visit <https://github.com/settings/tokens?type=beta>.
-2. Click **Generate new token**, label it `agent-triage`, and set an
+2. Click **Generate new token**, label it `docket`, and set an
    expiry.
 3. Under **Repository access**, pick **Only select repositories** and
-   choose the repo you want agent-triage to post into.
+   choose the repo you want docket to post into.
 4. Under **Permissions → Repository**, grant:
    - **Issues**: Read and write
    - **Metadata**: Read-only (required for any repo-scoped PAT)
@@ -33,48 +33,48 @@ because they scope to specific repositories.
 ### Classic PAT (also works)
 
 1. Visit <https://github.com/settings/tokens>.
-2. Click **Generate new token (classic)**, label it `agent-triage`, and
+2. Click **Generate new token (classic)**, label it `docket`, and
    set an expiry.
 3. Select the `repo` scope (or just `public_repo` for public-only
    repositories).
 4. Generate and copy the token (it starts with `ghp_`).
 
-## 2. Configure agent-triage
+## 2. Configure docket
 
 CLI flags:
 
 ```bash
-agent-triage run \
+docket run \
   --backend phoenix \
   --phoenix-url http://localhost:6006 \
   --tracker github \
   --github-token "$GITHUB_TOKEN" \
-  --github-owner agent-triage \
-  --github-repo agent-triage \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --github-owner docket \
+  --github-repo docket \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 ```
 
-Or `agent-triage.yaml`:
+Or `docket.yaml`:
 
 ```yaml
 trace_backend:
   type: mcp
-  command: agent-triage-adapter-phoenix
+  command: docket-adapter-phoenix
   env:
     PHOENIX_URL: http://localhost:6006
 
 tracker:
   type: mcp
-  command: agent-triage-adapter-github
+  command: docket-adapter-github
   env:
     GITHUB_TOKEN: ${GITHUB_TOKEN}
-    GITHUB_OWNER: agent-triage
-    GITHUB_REPO: agent-triage
+    GITHUB_OWNER: docket
+    GITHUB_REPO: docket
     # For GitHub Enterprise Server:
     # GITHUB_API_URL: https://github.acme.internal/api/v3
 
-rubric: agent-triage.dev/builtin/agents/v1
+rubric: docket.dev/builtin/agents/v1
 auto_post_threshold: never
 ```
 

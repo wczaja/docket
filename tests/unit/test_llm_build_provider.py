@@ -1,7 +1,7 @@
 import pytest
 
-from agent_triage.errors import DetectionError
-from agent_triage.llm import (
+from docket.errors import DetectionError
+from docket.llm import (
     DEFAULT_ANTHROPIC_MODEL,
     DEFAULT_OPENAI_MODEL,
     DEFAULT_PROVIDER_URI,

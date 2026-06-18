@@ -1,6 +1,6 @@
 # Python API reference
 
-agent-triage is a library as well as a CLI. This page documents the
+docket is a library as well as a CLI. This page documents the
 public Python surface for embedding the pipeline in your own
 orchestration — a scheduler, an Airflow DAG, a custom service, or
 another agent.
@@ -14,13 +14,13 @@ your event loop or wrap with `asyncio.run`.
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-from agent_triage.adapters.trace.phoenix import PhoenixAdapter
-from agent_triage.agent.triage import run_triage_pipeline
-from agent_triage.rubric.loader import load_rubric
+from docket.adapters.trace.phoenix import PhoenixAdapter
+from docket.agent.triage import run_triage_pipeline
+from docket.rubric.loader import load_rubric
 
 async def main() -> None:
     backend = PhoenixAdapter(base_url="http://localhost:6006")
-    rubric = load_rubric("agent-triage.dev/builtin/agents/v1")
+    rubric = load_rubric("docket.dev/builtin/agents/v1")
     until = datetime.now(UTC)
     try:
         result = await run_triage_pipeline(
@@ -46,9 +46,9 @@ Requires `ANTHROPIC_API_KEY` (default judge) and `OPENAI_API_KEY`
 
 ## The pipeline
 
-### `agent_triage.agent.triage.run_triage_pipeline(...) -> TriageResult`
+### `docket.agent.triage.run_triage_pipeline(...) -> TriageResult`
 
-The deterministic six-stage pipeline (`agent-triage run` is a thin
+The deterministic six-stage pipeline (`docket run` is a thin
 wrapper around this). All parameters keyword-only:
 
 | Parameter | Type / default | Meaning |
@@ -63,7 +63,7 @@ wrapper around this). All parameters keyword-only:
 | `write_annotations` | `bool = False` | backend writeback (read-only by default) |
 | `run_id` | `str \| None` | default: `compute_run_id(...)` — deterministic, idempotent re-runs |
 | `backend_id` | `str = "phoenix"` | label used in run_id derivation and logs |
-| `output_dir` | `Path \| None` | draft/report queue dir; default `~/.agent-triage/queued-issues/` |
+| `output_dir` | `Path \| None` | draft/report queue dir; default `~/.docket/queued-issues/` |
 | `tracker` | `Tracker \| None` | enables dedup + posting; `None` = queue locally |
 | `auto_post_threshold` | `"never"` | `critical\|high\|medium\|low\|never` |
 | `sample_count`, `sample_strategy`, `stratify_by` | `None`, `"uniform"`, `None` | run_id-seeded sampling (`uniform\|stratified\|errors-only`) |
@@ -90,7 +90,7 @@ you need to correlate annotations with a run you're about to launch.
 
 ### Factories used by the CLI
 
-`agent_triage.runtime.build_backend(...)` / `build_tracker(...)` /
+`docket.runtime.build_backend(...)` / `build_tracker(...)` /
 `resolve_backend_id(...)` construct adapters from CLI-flag/config
 values — useful if you want CLI-equivalent precedence handling without
 the CLI.
@@ -102,12 +102,12 @@ the CLI.
 ### Constructors
 
 ```python
-from agent_triage.adapters.trace.phoenix import PhoenixAdapter
-from agent_triage.adapters.trace.langfuse import LangfuseAdapter
-from agent_triage.adapters.trace.langsmith import LangsmithAdapter
-from agent_triage.adapters.tracker.jira import JiraAdapter
-from agent_triage.adapters.tracker.linear import LinearAdapter
-from agent_triage.adapters.tracker.github import GitHubAdapter
+from docket.adapters.trace.phoenix import PhoenixAdapter
+from docket.adapters.trace.langfuse import LangfuseAdapter
+from docket.adapters.trace.langsmith import LangsmithAdapter
+from docket.adapters.tracker.jira import JiraAdapter
+from docket.adapters.tracker.linear import LinearAdapter
+from docket.adapters.tracker.github import GitHubAdapter
 
 PhoenixAdapter(base_url, api_key=None, max_list_pages=...)
 LangfuseAdapter(host, public_key=None, secret_key=None, max_list_pages=...)
@@ -122,7 +122,7 @@ Missing credentials raise `CredentialError` at construction. Every
 adapter retries 429/5xx with backoff and must be closed
 (`await adapter.close()`).
 
-### `agent_triage.adapters.base.TraceBackend` (ABC)
+### `docket.adapters.base.TraceBackend` (ABC)
 
 ```python
 async def list_traces(since, until, filter=None) -> list[str]
@@ -140,7 +140,7 @@ to the backend query or the adapter raises. Subclass this to integrate a
 backend we don't ship — implementation requirements and the parity-test
 expectations are in [adapters.md](adapters.md).
 
-### `agent_triage.adapters.base.Tracker` (ABC)
+### `docket.adapters.base.Tracker` (ABC)
 
 ```python
 async def list_open_issues(filter=None) -> list[Issue]
@@ -157,7 +157,7 @@ async def close() -> None
 ## LLM providers
 
 ```python
-from agent_triage.llm import (
+from docket.llm import (
     build_provider, build_embedding_provider,
     ModelProvider, AnthropicProvider, OpenAIProvider,
     EmbeddingProvider, OpenAIEmbeddingProvider,
@@ -184,7 +184,7 @@ Classify without clustering/drafting — e.g. to build your own scoring
 loop:
 
 ```python
-from agent_triage.agent.subagents.classifier import Classifier
+from docket.agent.subagents.classifier import Classifier
 
 classifier = Classifier(provider, batch_size=1, concurrency=8)
 results = await classifier.classify_all(
@@ -200,9 +200,9 @@ errored rather than raising.
 ## Rubrics
 
 ```python
-from agent_triage.rubric.loader import load_rubric        # resolves + merges imports
-from agent_triage.rubric.validator import validate_rubric_yaml
-from agent_triage.rubric.spec import Rubric, Mode, Detection
+from docket.rubric.loader import load_rubric        # resolves + merges imports
+from docket.rubric.validator import validate_rubric_yaml
+from docket.rubric.spec import Rubric, Mode, Detection
 ```
 
 `load_rubric(source)` accepts a `Path`, path string, `file://` URI, or
@@ -211,7 +211,7 @@ on cycles/missing imports, `RubricValidationError` otherwise). The
 `Rubric`/`Mode`/`Detection` Pydantic models mirror the
 [DSL reference](rubric-spec.md) exactly.
 
-## Models (`agent_triage.models`)
+## Models (`docket.models`)
 
 All Pydantic v2; `.model_dump()` / `.model_dump_json()` for
 serialization.
@@ -225,20 +225,20 @@ serialization.
 | `Annotation` | backend-bound classification: adds `run_id, severity, confidence, excerpt`; `idempotency_key()` = `trace_id\|run_id\|rubric_version\|mode_id` |
 | `Cluster`, `ClusterStats` | `cluster_id, mode_id, severity, member_trace_ids, representative_trace_id, representative_excerpt, stats(size, min/max/mean confidence)`; `compute_cluster_id()` is deterministic |
 | `IssueDraft` | `cluster_id, mode_id, rubric_version, run_id, severity, representative_trace_id, member_trace_ids, title, body, labels` — body ends with the provenance comment |
-| `IssueProvenance` | parse/emit the `<!-- agent-triage:provenance {...} -->` block (`parse_from_body`) |
+| `IssueProvenance` | parse/emit the `<!-- docket:provenance {...} -->` block (`parse_from_body`) |
 | `Issue`, `IssuePatch`, `IssueListing` | tracker-side shapes; `IssueListing.truncated` is the dedup-safety flag |
 | `TraceListing`, `TraceSummary`, `RESERVED_FILTER_KEYS` | listing-with-summaries + `truncated` flag |
 | `RunReport`, `ModeStats`, `TraceResult` | the structured run report behind `report_markdown`: window, counts, `traces_listed`, `listing_truncated`, per-mode positive/negative/error counts, `annotations_written` |
 
-## Cost estimation (`agent_triage.cost`)
+## Cost estimation (`docket.cost`)
 
 `estimate_cost(trace_count, mode_count, model, ...) -> CostEstimate`,
 `check_budget(...) -> BudgetCheck` (`.would_abort`, `.enforce()`),
 `known_models()`. The same functions `--dry-run` uses.
 
-## Errors (`agent_triage.errors`)
+## Errors (`docket.errors`)
 
-Everything raised on purpose derives from `AgentTriageError`:
+Everything raised on purpose derives from `DocketError`:
 
 | Exception | Raised when |
 |---|---|
@@ -250,10 +250,10 @@ Everything raised on purpose derives from `AgentTriageError`:
 | `TrackerError` | tracker call failed (after retries) |
 | `BudgetExceededError` | trace cap or cost ceiling tripped pre-fetch |
 
-Catch `AgentTriageError` at your orchestration boundary; nothing else is
+Catch `DocketError` at your orchestration boundary; nothing else is
 thrown deliberately.
 
-## Observability (`agent_triage.observability`)
+## Observability (`docket.observability`)
 
 - `redact(text: str) -> str` — the PII scrub (emails, phones, SSNs,
   account numbers) applied before logging and judge input. Call it on
@@ -264,4 +264,4 @@ thrown deliberately.
 
 ## Version
 
-`agent_triage.__version__` — single-sourced from package metadata.
+`docket.__version__` — single-sourced from package metadata.

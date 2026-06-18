@@ -1,4 +1,4 @@
-apiVersion: agent-triage.dev/v1
+apiVersion: docket.dev/v1
 kind: Rubric
 metadata:
   name: test-minimal

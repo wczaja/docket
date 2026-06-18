@@ -1,10 +1,10 @@
-"""Unit tests for `agent_triage.sampling`."""
+"""Unit tests for `docket.sampling`."""
 
 import logging
 
 import pytest
 
-from agent_triage.sampling import sample_trace_ids
+from docket.sampling import sample_trace_ids
 
 
 def test_uniform_sampling_returns_n_items() -> None:
@@ -58,7 +58,7 @@ def test_stratified_falls_back_to_uniform_with_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     ids = [f"t-{i}" for i in range(100)]
-    with caplog.at_level(logging.WARNING, logger="agent_triage.sampling"):
+    with caplog.at_level(logging.WARNING, logger="docket.sampling"):
         out = sample_trace_ids(ids, n=10, strategy="stratified", seed=1)
     assert len(out) == 10
     assert any("stratified" in r.message and "uniform" in r.message for r in caplog.records)
@@ -68,7 +68,7 @@ def test_errors_only_falls_back_to_uniform_with_warning(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     ids = [f"t-{i}" for i in range(100)]
-    with caplog.at_level(logging.WARNING, logger="agent_triage.sampling"):
+    with caplog.at_level(logging.WARNING, logger="docket.sampling"):
         out = sample_trace_ids(ids, n=10, strategy="errors-only", seed=1)
     assert len(out) == 10
     assert any("errors-only" in r.message for r in caplog.records)

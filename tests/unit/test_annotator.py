@@ -2,11 +2,11 @@
 
 import pytest
 
-from agent_triage.adapters.base import TraceBackend
-from agent_triage.agent.subagents.annotator import Annotator
-from agent_triage.errors import BackendError
-from agent_triage.models.classification import Annotation, Classification
-from agent_triage.rubric.spec import Detection, Mode, Rubric, RubricMetadata
+from docket.adapters.base import TraceBackend
+from docket.agent.subagents.annotator import Annotator
+from docket.errors import BackendError
+from docket.models.classification import Annotation, Classification
+from docket.rubric.spec import Detection, Mode, Rubric, RubricMetadata
 
 
 class _FakeBackend(TraceBackend):
@@ -40,7 +40,7 @@ class _FakeBackend(TraceBackend):
 
 def _rubric() -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="t", version="0.1.0"),
         modes=[

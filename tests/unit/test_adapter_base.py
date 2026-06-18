@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_triage.adapters.base import TraceBackend
+from docket.adapters.base import TraceBackend
 
 
 def test_trace_backend_cannot_instantiate_directly() -> None:

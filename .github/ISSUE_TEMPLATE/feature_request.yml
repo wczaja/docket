@@ -33,5 +33,5 @@ body:
     attributes:
       label: Alternatives considered
       description: >
-        Including "do it outside agent-triage" — e.g. in the rubric, in
+        Including "do it outside docket" — e.g. in the rubric, in
         the backend, or in a downstream consumer of the run report.

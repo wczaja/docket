@@ -5,8 +5,8 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 
-from agent_triage.adapters._retry import parse_retry_after, request_with_retry
-from agent_triage.errors import BackendError, TrackerError
+from docket.adapters._retry import parse_retry_after, request_with_retry
+from docket.errors import BackendError, TrackerError
 
 
 def _client(handler) -> httpx.AsyncClient:  # type: ignore[no-untyped-def]

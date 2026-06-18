@@ -4,11 +4,11 @@ from typing import Any
 
 import pytest
 
-from agent_triage.agent.subagents.classifier import Classifier, flatten_classifications
-from agent_triage.errors import DetectionError
-from agent_triage.llm.base import ModelProvider
-from agent_triage.models.trace import OpenInferenceTrace, Span
-from agent_triage.rubric.spec import Detection, Mode, Rubric, RubricMetadata
+from docket.agent.subagents.classifier import Classifier, flatten_classifications
+from docket.errors import DetectionError
+from docket.llm.base import ModelProvider
+from docket.models.trace import OpenInferenceTrace, Span
+from docket.rubric.spec import Detection, Mode, Rubric, RubricMetadata
 
 
 class _MockLLMProvider(ModelProvider):
@@ -24,7 +24,7 @@ class _MockLLMProvider(ModelProvider):
 
 def _rubric_regex(pattern: str = "x") -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="t", version="0.1.0"),
         modes=[
@@ -87,7 +87,7 @@ async def test_classifier_retries_then_records_error() -> None:
     """Detector that always errors -> Classification with `error` set after retries."""
 
     rubric = Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="t", version="0.1.0"),
         modes=[
@@ -132,7 +132,7 @@ async def test_progress_callback_called_per_trace() -> None:
 
 
 def test_flatten_classifications_preserves_dict_order() -> None:
-    from agent_triage.models.classification import Classification
+    from docket.models.classification import Classification
 
     a = Classification(trace_id="a", rubric_version="v", mode_id="m", positive=False)
     b = Classification(trace_id="b", rubric_version="v", mode_id="m", positive=False)
@@ -143,8 +143,8 @@ def test_flatten_classifications_preserves_dict_order() -> None:
 async def test_classifier_succeeds_after_transient_failure() -> None:
     """If the detector fails once then succeeds, the final Classification has no error."""
 
-    from agent_triage.detectors.base import Detector
-    from agent_triage.models.trace import TraceLike, Verdict
+    from docket.detectors.base import Detector
+    from docket.models.trace import TraceLike, Verdict
 
     class _FlakyDetector(Detector):
         def __init__(self) -> None:
@@ -173,8 +173,8 @@ async def test_classifier_succeeds_after_transient_failure() -> None:
 
 async def test_classify_all_settles_siblings_before_reraising_unexpected_error() -> None:
     """A non-DetectionError from one trace must not abandon in-flight siblings."""
-    from agent_triage.detectors.base import Detector
-    from agent_triage.models.trace import TraceLike, Verdict
+    from docket.detectors.base import Detector
+    from docket.models.trace import TraceLike, Verdict
 
     evaluated: list[str] = []
 

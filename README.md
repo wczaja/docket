@@ -1,12 +1,12 @@
-# agent-triage
+# docket
 
-[![CI](https://github.com/wczaja/agent-triage/actions/workflows/ci.yml/badge.svg)](https://github.com/wczaja/agent-triage/actions/workflows/ci.yml)
+[![CI](https://github.com/wczaja/docket/actions/workflows/ci.yml/badge.svg)](https://github.com/wczaja/docket/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
 An observability-platform-agnostic triage runtime for LLM agent traces.
 
-agent-triage reads traces from your existing observability backend
+docket reads traces from your existing observability backend
 (**Phoenix**, **Langfuse**, **LangSmith**), classifies each one against a
 YAML failure-mode taxonomy you write, clusters similar failures together,
 and drafts issues into your tracker (**Jira**, **Linear**, **GitHub
@@ -27,8 +27,8 @@ GitHub-Issues tracker.
 ### 1. Install
 
 ```bash
-pip install agent-triage
-# or:  uv pip install agent-triage
+pip install docket
+# or:  uv pip install docket
 ```
 
 ### 2. Bring up Phoenix
@@ -55,13 +55,13 @@ export GITHUB_TOKEN="ghp_..."                 # PAT with Issues write
 ### 4. Run
 
 ```bash
-agent-triage run \
+docket run \
   --backend phoenix \
   --phoenix-url http://localhost:6006 \
   --tracker github \
   --github-owner YOUR_GH_USER \
-  --github-repo agent-triage-issues \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --github-repo docket-issues \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 ```
 
@@ -71,7 +71,7 @@ That's it. The pipeline:
 2. Runs each one through the `agents/v1` failure-mode rubric.
 3. Clusters positive classifications per mode.
 4. Drafts one issue per cluster into
-   `~/.agent-triage/queued-issues/<run-id>/`.
+   `~/.docket/queued-issues/<run-id>/`.
 5. Looks at your GitHub repo for matching open issues (dedup by labels +
    embedded provenance) and comments on existing issues that grew, or
    leaves new ones in the local queue for `--review`.
@@ -84,12 +84,12 @@ severity drafts. Add `--dry-run` to price a window before committing to it.
 For scheduled triage, swap `run` for the daemon:
 
 ```bash
-agent-triage serve --interval 1h ...   # same flags as run
+docket serve --interval 1h ...   # same flags as run
 ```
 
 Each tick processes exactly the window since the last successful tick —
 no gaps, no overlap — and a failed tick retries its window instead of
-dropping it. (Plain cron + `agent-triage run` works too; `serve` just
+dropping it. (Plain cron + `docket run` works too; `serve` just
 does the window bookkeeping for you.)
 
 For other backends and trackers, see `docs/quickstart.md` (full matrix:
@@ -99,7 +99,7 @@ Phoenix/Langfuse/LangSmith × Jira/Linear/GitHub).
 
 ## What it does
 
-agent-triage runs a small pipeline of LLM-driven subagents over your
+docket runs a small pipeline of LLM-driven subagents over your
 existing traces:
 
 ```
@@ -151,7 +151,7 @@ stopping at their pagination ceiling; when the open-issue listing is
 truncated during dedup, drafts are queued for review instead of
 auto-posted, since "no duplicate found" was not proven.
 
-**State lives in the backends, not here.** agent-triage doesn't own a
+**State lives in the backends, not here.** docket doesn't own a
 database. Annotations key off `(trace_id, run_id, rubric_version,
 mode_id)` in the observability backend; issues key off labels +
 HTML-comment provenance in the tracker. Re-running the same window is
@@ -166,23 +166,23 @@ intended to be imported into a domain-specific rubric you maintain.
 
 | URI                                       | Modes |
 | ----------------------------------------- | ----- |
-| `agent-triage.dev/builtin/agents/v1`      | 6 — hallucination, infinite loop, premature termination, unsafe tool call, refusal leakage, bad handoff |
-| `agent-triage.dev/builtin/rag/v1`         | 4 — off-corpus answer, missing citation, stale retrieval, context overflow |
-| `agent-triage.dev/builtin/routing/v1`     | 4 — wrong-skill routing, capability mismatch, dead-end transfer, oscillation |
-| `agent-triage.dev/builtin/multi-agent/v1` | 4 — handoff context loss, conflicting instructions, role drift, shared-memory corruption |
+| `docket.dev/builtin/agents/v1`      | 6 — hallucination, infinite loop, premature termination, unsafe tool call, refusal leakage, bad handoff |
+| `docket.dev/builtin/rag/v1`         | 4 — off-corpus answer, missing citation, stale retrieval, context overflow |
+| `docket.dev/builtin/routing/v1`     | 4 — wrong-skill routing, capability mismatch, dead-end transfer, oscillation |
+| `docket.dev/builtin/multi-agent/v1` | 4 — handoff context loss, conflicting instructions, role drift, shared-memory corruption |
 
-Reference them by URI on the CLI (`--rubric agent-triage.dev/builtin/rag/v1`)
+Reference them by URI on the CLI (`--rubric docket.dev/builtin/rag/v1`)
 or import them into your own rubric:
 
 ```yaml
-apiVersion: agent-triage.dev/v1
+apiVersion: docket.dev/v1
 kind: Rubric
 metadata:
   name: my-prod-agents
   version: 1.0.0
 imports:
-  - agent-triage.dev/builtin/agents/v1
-  - agent-triage.dev/builtin/rag/v1
+  - docket.dev/builtin/agents/v1
+  - docket.dev/builtin/rag/v1
 modes:
   - id: refund-without-confirmation
     severity: critical
@@ -192,8 +192,8 @@ modes:
     # ... your modes go here
 ```
 
-Validate with `agent-triage validate ./my-rubric.yaml`. Smoke-test the
-examples with `agent-triage self-test ./my-rubric.yaml`.
+Validate with `docket validate ./my-rubric.yaml`. Smoke-test the
+examples with `docket self-test ./my-rubric.yaml`.
 
 ---
 
@@ -203,8 +203,8 @@ examples with `agent-triage self-test ./my-rubric.yaml`.
   it; the runtime never sees backend-specific shapes.
 - **MCP** is the integration protocol for both trace backends and
   trackers. The CLI ships one MCP server binary per adapter
-  (`agent-triage-adapter-phoenix`, `agent-triage-adapter-jira`, …) that
-  you can run standalone or invoke through `agent-triage run`.
+  (`docket-adapter-phoenix`, `docket-adapter-jira`, …) that
+  you can run standalone or invoke through `docket run`.
 - **deepagents** is the agent harness; we don't reimplement planning,
   virtual filesystems, or subagent delegation.
 - **Stateless runtime.** Annotations live in the backend; issues live in
@@ -214,7 +214,7 @@ examples with `agent-triage self-test ./my-rubric.yaml`.
 
 ### Execution modes
 
-agent-triage ships two execution modes over the same six pipeline stages
+docket ships two execution modes over the same six pipeline stages
 (`list_traces` → `classify_traces` → `annotate_classifications` →
 `cluster_classifications` → `draft_issues` → `write_report`):
 
@@ -264,7 +264,7 @@ Start at the [docs index](docs/index.md).
 
 - [CLI](docs/cli.md) — every command, flag, and exit code for `run`,
   `serve`, `validate`, `self-test`, and the adapter binaries
-- [Configuration](docs/configuration.md) — `agent-triage.yaml` schema,
+- [Configuration](docs/configuration.md) — `docket.yaml` schema,
   all env vars, precedence rules, defaults
 - [Python API](docs/python-api.md) — embed the pipeline as a library:
   `run_triage_pipeline`, adapters, providers, models, errors

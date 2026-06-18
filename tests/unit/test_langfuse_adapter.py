@@ -13,9 +13,9 @@ from typing import Any
 import httpx
 import pytest
 
-from agent_triage.adapters.trace.langfuse import LangfuseAdapter
-from agent_triage.errors import BackendError
-from agent_triage.models.classification import Annotation
+from docket.adapters.trace.langfuse import LangfuseAdapter
+from docket.errors import BackendError
+from docket.models.classification import Annotation
 
 
 def _make_adapter(
@@ -277,7 +277,7 @@ async def test_annotate_trace_posts_score() -> None:
     assert captured["path"] == "/api/public/scores"
     body = captured["body"]
     assert body["traceId"] == "t-1"
-    assert body["name"] == "agent-triage:hallucination"
+    assert body["name"] == "docket:hallucination"
     assert body["value"] == 1.0
     assert body["metadata"]["run_id"] == "run-7"
     assert body["metadata"]["idempotency_key"].startswith("t-1|run-7|")
@@ -381,10 +381,10 @@ async def test_mark_trace_processed_writes_sentinel_score() -> None:
     await adapter.mark_trace_processed("t-42", run_id="run-abc", rubric_version="agents/v1@1")
     assert captured["path"] == "/api/public/scores"
     assert captured["body"]["traceId"] == "t-42"
-    assert captured["body"]["name"] == "agent-triage:processed"
+    assert captured["body"]["name"] == "docket:processed"
     assert captured["body"]["metadata"]["run_id"] == "run-abc"
     # Deterministic client-supplied id so re-marking the same trace upserts.
-    expected_key = "t-42|run-abc|agents/v1@1|agent-triage:processed"
+    expected_key = "t-42|run-abc|agents/v1@1|docket:processed"
     assert captured["body"]["id"] == str(uuid.uuid5(uuid.NAMESPACE_URL, expected_key))
 
 

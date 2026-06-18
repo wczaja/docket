@@ -1,9 +1,9 @@
 import pytest
 
-from agent_triage.detectors.regex import RegexDetector
-from agent_triage.errors import DetectionError
-from agent_triage.models.trace import TraceLike
-from agent_triage.rubric.spec import Detection, Mode
+from docket.detectors.regex import RegexDetector
+from docket.errors import DetectionError
+from docket.models.trace import TraceLike
+from docket.rubric.spec import Detection, Mode
 
 
 def _mode(**detection_kwargs: object) -> Mode:

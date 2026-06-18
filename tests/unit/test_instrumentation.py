@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agent_triage.observability.instrumentation import (
+from docket.observability.instrumentation import (
     DEFAULT_INSTRUMENTATION_ENDPOINT,
     DEFAULT_PROJECT_NAME,
 )
@@ -17,11 +17,11 @@ from agent_triage.observability.instrumentation import (
 
 def test_default_constants() -> None:
     assert DEFAULT_INSTRUMENTATION_ENDPOINT.startswith("http")
-    assert DEFAULT_PROJECT_NAME == "agent-triage"
+    assert DEFAULT_PROJECT_NAME == "docket"
 
 
 def test_configure_instrumentation_instruments_and_uninstruments() -> None:
-    from agent_triage.observability.instrumentation import configure_instrumentation
+    from docket.observability.instrumentation import configure_instrumentation
 
     fake_provider = MagicMock(name="tracer_provider")
     fake_anthropic = MagicMock(name="AnthropicInstrumentor")
@@ -50,7 +50,7 @@ def test_configure_instrumentation_instruments_and_uninstruments() -> None:
 
 
 def test_configure_instrumentation_can_disable_per_provider() -> None:
-    from agent_triage.observability.instrumentation import configure_instrumentation
+    from docket.observability.instrumentation import configure_instrumentation
 
     fake_provider = MagicMock(name="tracer_provider")
     fake_anthropic = MagicMock(name="AnthropicInstrumentor")
@@ -78,7 +78,7 @@ def test_configure_instrumentation_can_disable_per_provider() -> None:
 
 def test_configure_instrumentation_cleans_up_on_exception() -> None:
     """If the with-block raises, instrumentors still uninstrument on the way out."""
-    from agent_triage.observability.instrumentation import configure_instrumentation
+    from docket.observability.instrumentation import configure_instrumentation
 
     fake_provider = MagicMock(name="tracer_provider")
     fake_anthropic = MagicMock(name="AnthropicInstrumentor")
@@ -108,8 +108,8 @@ def test_configure_instrumentation_import_failure_raises_config_error(
     """A broken instrumentation install surfaces as ConfigError, not ImportError."""
     import sys
 
-    from agent_triage.errors import ConfigError
-    from agent_triage.observability.instrumentation import configure_instrumentation
+    from docket.errors import ConfigError
+    from docket.observability.instrumentation import configure_instrumentation
 
     # Setting a sys.modules entry to None makes its import raise ImportError.
     monkeypatch.setitem(sys.modules, "phoenix.otel", None)

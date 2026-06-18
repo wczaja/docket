@@ -1,8 +1,8 @@
 # Triage as CI: scheduled runs without a daemon
 
-agent-triage is a one-shot CLI by design — there is no resident daemon to
+docket is a one-shot CLI by design — there is no resident daemon to
 operate in v1.0. The intended production pattern is a scheduler invoking
-`agent-triage run` on a window slightly larger than the cadence (overlap
+`docket run` on a window slightly larger than the cadence (overlap
 is safe: re-runs are idempotent via the deterministic `run_id` and
 backend annotation upserts).
 
@@ -14,7 +14,7 @@ Copy it into `.github/workflows/` of any repository, set the secrets, and
 you have hourly triage with the run report in the job summary:
 
 ```yaml
-name: agent-triage
+name: docket
 on:
   schedule:
     - cron: "5 * * * *"   # hourly at :05
@@ -27,21 +27,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install agent-triage
+      - run: pip install docket
       - name: Run triage
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # embeddings (or use --embedding-provider voyage)
           GITHUB_TOKEN: ${{ secrets.TRIAGE_GITHUB_TOKEN }} # PAT with Issues write on the target repo
         run: |
-          agent-triage run \
+          docket run \
             --backend langsmith \
             --langsmith-api-key "${{ secrets.LANGSMITH_API_KEY }}" \
             --langsmith-project prod-agents \
             --tracker github \
             --github-owner my-org \
             --github-repo agent-issues \
-            --rubric agent-triage.dev/builtin/agents/v1 \
+            --rubric docket.dev/builtin/agents/v1 \
             --since 2h \
             --queue-dir ./triage-queue \
             | tee -a "$GITHUB_STEP_SUMMARY"
@@ -61,7 +61,7 @@ Notes:
   label-based issue dedup absorb the double coverage.
 - **Human-in-the-loop in CI.** Leave `auto_post_threshold` at `never` at
   first: new-issue drafts land in the queue artifact for review
-  (`agent-triage queue list` / `agent-triage queue post` locally), while
+  (`docket queue list` / `docket queue post` locally), while
   comments on *existing* matched issues are posted directly (additive — a
   human is already on the issue). Once the rubric's false-positive rate
   is calibrated, ratchet down with `--auto-post-threshold high`.
@@ -75,9 +75,9 @@ Notes:
 ## cron
 
 ```cron
-5 * * * *  AGENT_TRIAGE_CONFIG=/etc/agent-triage.yaml \
-           agent-triage run --config /etc/agent-triage.yaml --since 2h \
-           >> /var/log/agent-triage.log 2>&1
+5 * * * *  DOCKET_CONFIG=/etc/docket.yaml \
+           docket run --config /etc/docket.yaml --since 2h \
+           >> /var/log/docket.log 2>&1
 ```
 
 Keep secrets in the environment (the config file supports `${VAR}`

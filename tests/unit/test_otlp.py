@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-from agent_triage.errors import BackendError
-from agent_triage.models.otlp import from_otlp, to_otlp
+from docket.errors import BackendError
+from docket.models.otlp import from_otlp, to_otlp
 
 
 def _minimal_otlp_span(span_id: str, trace_id: str) -> dict[str, Any]:
@@ -110,7 +110,7 @@ def test_from_otlp_raises_on_empty_payload() -> None:
 
 
 def test_to_otlp_encodes_int_as_string() -> None:
-    from agent_triage.models.trace import Span
+    from docket.models.trace import Span
 
     trace_dict = {
         "resourceSpans": [
@@ -153,14 +153,14 @@ def test_to_otlp_encodes_int_as_string() -> None:
 
 
 def test_to_otlp_encodes_bool_distinct_from_int() -> None:
-    from agent_triage.models.otlp import _encode_value
+    from docket.models.otlp import _encode_value
 
     assert _encode_value(True) == {"boolValue": True}
     assert _encode_value(1) == {"intValue": "1"}
 
 
 def test_to_otlp_encodes_nested_kvlist() -> None:
-    from agent_triage.models.otlp import _encode_value
+    from docket.models.otlp import _encode_value
 
     encoded = _encode_value({"a": 1, "b": "x"})
     assert encoded == {
@@ -174,7 +174,7 @@ def test_to_otlp_encodes_nested_kvlist() -> None:
 
 
 def test_decode_value_unknown_returns_none() -> None:
-    from agent_triage.models.otlp import _decode_value
+    from docket.models.otlp import _decode_value
 
     assert _decode_value({"weirdValue": "x"}) is None
 

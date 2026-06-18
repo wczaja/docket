@@ -7,12 +7,12 @@ pipeline uses. Six binaries are installed with the package:
 
 | Binary | Wraps | Kind |
 |---|---|---|
-| `agent-triage-adapter-phoenix` | Phoenix | trace backend |
-| `agent-triage-adapter-langfuse` | Langfuse | trace backend |
-| `agent-triage-adapter-langsmith` | LangSmith | trace backend |
-| `agent-triage-adapter-jira` | Jira | tracker |
-| `agent-triage-adapter-linear` | Linear | tracker |
-| `agent-triage-adapter-github` | GitHub Issues | tracker |
+| `docket-adapter-phoenix` | Phoenix | trace backend |
+| `docket-adapter-langfuse` | Langfuse | trace backend |
+| `docket-adapter-langsmith` | LangSmith | trace backend |
+| `docket-adapter-jira` | Jira | tracker |
+| `docket-adapter-linear` | Linear | tracker |
+| `docket-adapter-github` | GitHub Issues | tracker |
 
 Configuration is environment-only (see the variable tables in
 [cli.md](cli.md#mcp-adapter-binaries) /
@@ -24,11 +24,11 @@ configuration:
 {
   "mcpServers": {
     "traces": {
-      "command": "agent-triage-adapter-phoenix",
+      "command": "docket-adapter-phoenix",
       "env": { "PHOENIX_URL": "http://localhost:6006" }
     },
     "issues": {
-      "command": "agent-triage-adapter-github",
+      "command": "docket-adapter-github",
       "env": {
         "GITHUB_TOKEN": "ghp_...",
         "GITHUB_OWNER": "my-org",
@@ -80,7 +80,7 @@ plus the truncation contract:
 | `trace_id` | string | yes |
 
 Returns the trace as **OTLP JSON** (OpenInference semantic conventions),
-the same shape `agent_triage.models.from_otlp` parses.
+the same shape `docket.models.from_otlp` parses.
 
 ### `annotate_trace`
 
@@ -109,7 +109,7 @@ Semantic search where the backend supports it; otherwise the call errors
 
 | Arg | Type | Required | Notes |
 |---|---|---|---|
-| `filter` | object \| null | no | must honor a `labels` array meaning *all* labels present — this is how dedup queries `["agent-triage", "mode:<id>", "rubric:<name>@<version>"]` |
+| `filter` | object \| null | no | must honor a `labels` array meaning *all* labels present — this is how dedup queries `["docket", "mode:<id>", "rubric:<name>@<version>"]` |
 
 `_v2` adds `{"issues": [...], "truncated": bool, "page_limit": int}` —
 when `truncated` is true, "no duplicate found" is unproven (the triage
@@ -124,7 +124,7 @@ unsupported by a tracker.
 
 | Arg | Type | Required | Notes |
 |---|---|---|---|
-| `draft` | object | yes | the `IssueDraft` model; the tracker must persist `labels` and `body` faithfully (the body ends with the `<!-- agent-triage:provenance {...} -->` block) |
+| `draft` | object | yes | the `IssueDraft` model; the tracker must persist `labels` and `body` faithfully (the body ends with the `<!-- docket:provenance {...} -->` block) |
 
 Returns the created `Issue` (`id`, `key`, `url`, `title`, `body`,
 `labels`, `state`).
@@ -143,12 +143,12 @@ Returns the created `Issue` (`id`, `key`, `url`, `title`, `body`,
 
 - The pipeline CLI does **not** spawn these binaries; it drives the same
   adapter classes in-process. The servers exist so *other* systems can
-  compose with agent-triage's contracts — e.g. a chat agent that calls
+  compose with docket's contracts — e.g. a chat agent that calls
   `list_traces_v2` + `get_trace` to investigate, then files follow-ups
   via `create_issue` with proper provenance so the nightly triage run
   dedups against them.
 - If you create issues through these tools yourself, reuse
-  `agent_triage.models.IssueDraft` / `make_labels()` so your issues
+  `docket.models.IssueDraft` / `make_labels()` so your issues
   participate in dedup instead of colliding with it.
 - Tool names and schemas are stable per semver (they mirror the
   `TraceBackend`/`Tracker` ABCs documented in

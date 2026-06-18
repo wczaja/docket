@@ -15,14 +15,14 @@ on:
   push:
     branches: [main]
     paths:
-      - "agent_triage/rubric/**"
-      - "agent_triage/detectors/**"
+      - "docket/rubric/**"
+      - "docket/detectors/**"
       - "rubrics/**"
       - ".github/workflows/eval-rubrics.yml"
   pull_request:
     paths:
-      - "agent_triage/rubric/**"
-      - "agent_triage/detectors/**"
+      - "docket/rubric/**"
+      - "docket/detectors/**"
       - "rubrics/**"
       - ".github/workflows/eval-rubrics.yml"
   workflow_dispatch:
@@ -43,13 +43,13 @@ jobs:
         run: |
           set -euo pipefail
           for name in agents rag routing multi-agent; do
-            agent-triage validate "agent-triage.dev/builtin/${name}/v1"
+            docket validate "docket.dev/builtin/${name}/v1"
           done
       - name: Validate example rubrics
         run: |
           set -euo pipefail
           for f in rubrics/examples/*.yaml; do
-            agent-triage validate "$f"
+            docket validate "$f"
           done
 
   self-test:
@@ -71,8 +71,8 @@ jobs:
         run: |
           set -euo pipefail
           for name in agents rag routing multi-agent; do
-            agent-triage self-test "agent-triage.dev/builtin/${name}/v1" --batch 8
+            docket self-test "docket.dev/builtin/${name}/v1" --batch 8
           done
           for f in rubrics/examples/*.yaml; do
-            agent-triage self-test "$f" --batch 8
+            docket self-test "$f" --batch 8
           done

@@ -1,4 +1,4 @@
-# agent-triage: Design and Implementation Plan
+# docket: Design and Implementation Plan
 **A cross-platform, observability-agnostic agent triage runtime configured by a composable failure-mode DSL.**
 
 *Version 0.1 — Working design draft*
@@ -9,7 +9,7 @@
 
 ## 0. How to use this document
 
-This document is the implementation spec for agent-triage. Sections are ordered by implementation dependency, and each phase has explicit, machine-verifiable acceptance criteria — work should not advance to the next phase until the current phase's criteria are demonstrably met. Read it end to end before starting any phase, and propose an implementation plan for a phase before writing its code.
+This document is the implementation spec for docket. Sections are ordered by implementation dependency, and each phase has explicit, machine-verifiable acceptance criteria — work should not advance to the next phase until the current phase's criteria are demonstrably met. Read it end to end before starting any phase, and propose an implementation plan for a phase before writing its code.
 
 The document uses `MUST`, `SHOULD`, and `MAY` per RFC 2119 conventions. `MUST` requirements are non-negotiable; deviations require explicit maintainer approval before merge.
 
@@ -19,7 +19,7 @@ The document uses `MUST`, `SHOULD`, and `MAY` per RFC 2119 conventions. `MUST` r
 
 ### 1.1 Mission
 
-agent-triage provides an open-source, observability-platform-agnostic agent triage runtime that:
+docket provides an open-source, observability-platform-agnostic agent triage runtime that:
 
 1. Pulls LLM agent traces from supported backends (Phoenix, Langfuse, LangSmith in v1.0; OpenInference compatibility means other backends can be added post-v1.0)
 2. Classifies traces against a composable, declarative failure-mode taxonomy (the "rubric")
@@ -63,9 +63,9 @@ The gap: a runtime that works across all of these, configured by a portable rubr
 - Three tracker adapters: Jira, Linear, GitHub Issues
 - LLM-as-judge classifier with structured output validation
 - Embedding-based clustering with configurable similarity thresholds
-- CLI for one-shot runs (`agent-triage run --since=24h`)
+- CLI for one-shot runs (`docket run --since=24h`)
 - Scheduled runs via cron or CI (see `docs/triage-as-ci.md`); a resident
-  daemon mode (`agent-triage serve`) is deferred to v1.1 — one-shot runs
+  daemon mode (`docket serve`) is deferred to v1.1 — one-shot runs
   on a scheduler cover the v1.0 operating model without a long-lived
   process to operate
 - Reference synthetic taxonomy as example
@@ -136,7 +136,7 @@ The gap: a runtime that works across all of these, configured by a portable rubr
 
 4. **YAML rubric DSL with JSON Schema validation.** Failure modes are declared in YAML and validated against a JSON Schema. Each `llm_judge` mode's `output_schema` is itself a JSON Schema (draft 2020-12), passed through directly to the LLM provider's native structured-output mechanism without translation. A registry pattern (think `pip` for rubrics) supports composable + community-shared taxonomies.
 
-5. **Stateless triage agent, state in observability backend.** agent-triage never owns durable storage beyond its config. All state (which traces were processed, what issues were created, what annotations exist) lives in the user's observability backend and tracker, addressed by trace ID. This is the cross-platform property — we don't fork the data.
+5. **Stateless triage agent, state in observability backend.** docket never owns durable storage beyond its config. All state (which traces were processed, what issues were created, what annotations exist) lives in the user's observability backend and tracker, addressed by trace ID. This is the cross-platform property — we don't fork the data.
 
 6. **LLM-as-judge for classification, embeddings for clustering.** Per-trace classification needs reasoning over multi-turn context; pure embeddings are too lossy. Cross-trace clustering benefits from cheap embedding similarity. Different tools for different jobs.
 
@@ -175,10 +175,10 @@ The rubric DSL MUST be:
 
 ```yaml
 # rubric.yaml
-apiVersion: agent-triage.dev/v1
+apiVersion: docket.dev/v1
 kind: Rubric
 metadata:
-  name: sample-support-agent-triage
+  name: sample-support-docket
   version: 0.1.0
   authors:
     - maintainer@example.com
@@ -188,8 +188,8 @@ metadata:
 
 # Optional: import other rubrics. Modes are merged; later imports override earlier.
 imports:
-  - agent-triage.dev/builtin/agents/v1
-  - agent-triage.dev/builtin/rag/v1
+  - docket.dev/builtin/agents/v1
+  - docket.dev/builtin/rag/v1
   - file://./shared/common.yaml
 
 # The taxonomy itself.
@@ -286,13 +286,13 @@ triage:
 **Supported import schemes (v1.0):**
 
 - `file://<path>` — absolute, or relative to the importing rubric file
-- `agent-triage.dev/builtin/<rubric>/<version>` — resolved against packaged data via `importlib.resources`
+- `docket.dev/builtin/<rubric>/<version>` — resolved against packaged data via `importlib.resources`
 
 `https://` and `registry://` schemes are reserved for v1.1+; v1.0 has no network in the validation path.
 
 ### 3.3 Built-in rubrics
 
-The project SHOULD ship with a starter set under `agent-triage.dev/builtin/`:
+The project SHOULD ship with a starter set under `docket.dev/builtin/`:
 
 - `agents/v1`: generic LLM agent failure modes (hallucination, tool misuse, infinite loop, premature termination)
 - `rag/v1`: retrieval failure modes (missing context, wrong context, context contradiction)
@@ -311,7 +311,7 @@ v1.0 supports:
 - `metric_threshold`: numeric threshold against OpenInference span attributes (latency, token count, etc.)
 - `composite`: AND/OR of the above
 
-Each detection type MUST have a corresponding Python implementation in `agent_triage/detectors/`.
+Each detection type MUST have a corresponding Python implementation in `docket/detectors/`.
 
 ### 3.5 Validation rules
 
@@ -348,12 +348,12 @@ Rubrics use semver. Breaking changes to a rubric require a major version bump. T
 
 ### 4.2 Execution modes
 
-agent-triage ships **two execution modes** that share the same six pipeline stages (`list_traces`, `classify_traces`, `annotate_classifications`, `cluster_classifications`, `draft_issues`, `write_report`) and the same subagent implementations (§4.3). The modes differ only in **who decides the order of operations**: deterministic Python, or an LLM-driven planner.
+docket ships **two execution modes** that share the same six pipeline stages (`list_traces`, `classify_traces`, `annotate_classifications`, `cluster_classifications`, `draft_issues`, `write_report`) and the same subagent implementations (§4.3). The modes differ only in **who decides the order of operations**: deterministic Python, or an LLM-driven planner.
 
 | Mode | Entry | Orchestration | Intended use |
 |------|-------|---------------|--------------|
-| Deterministic pipeline (default) | `agent-triage run` | Stages execute in fixed order from `run_triage_pipeline` | Batch / cron / CI. Anywhere SLOs, cost forecasting, reproducibility, and stack-trace debuggability matter. **This is the production execution model.** |
-| Deep Agents harness | `agent-triage run --agent` | The six stages are exposed as LangChain tools; a top-level LLM (default Haiku) plans the calls; deepagents virtual filesystem holds inter-stage artifacts | Exploratory / debugging runs today. Substrate for future interactive surfaces (chat-driven triage, incident investigation, rubric authoring) — see §4.2.2. |
+| Deterministic pipeline (default) | `docket run` | Stages execute in fixed order from `run_triage_pipeline` | Batch / cron / CI. Anywhere SLOs, cost forecasting, reproducibility, and stack-trace debuggability matter. **This is the production execution model.** |
+| Deep Agents harness | `docket run --agent` | The six stages are exposed as LangChain tools; a top-level LLM (default Haiku) plans the calls; deepagents virtual filesystem holds inter-stage artifacts | Exploratory / debugging runs today. Substrate for future interactive surfaces (chat-driven triage, incident investigation, rubric authoring) — see §4.2.2. |
 
 Both modes:
 
@@ -371,7 +371,7 @@ Two invocations with identical backend, rubric, and time window produce the same
 
 #### 4.2.1 Deterministic pipeline (default)
 
-The default `agent-triage run` path is `run_triage_pipeline` in `agent_triage/agent/triage.py`. The six stages execute in fixed order with plain Python control flow. Stages share data through typed Pydantic objects passed in-process. No LLM orchestrator sits above the pipeline; the only LLM calls are the ones the detectors and drafter make.
+The default `docket run` path is `run_triage_pipeline` in `docket/agent/triage.py`. The six stages execute in fixed order with plain Python control flow. Stages share data through typed Pydantic objects passed in-process. No LLM orchestrator sits above the pipeline; the only LLM calls are the ones the detectors and drafter make.
 
 This is the production execution model because:
 
@@ -384,7 +384,7 @@ Operators choose this mode for nightly cron, CI integration, batch backfills, an
 
 #### 4.2.2 Deep Agents harness (`--agent` opt-in)
 
-The `--agent` flag routes the same workflow through `agent_triage/agent/deep_agent.py`, which wraps each pipeline stage as a LangChain `@tool` and hands the toolset to `deepagents.create_deep_agent`. A top-level planning LLM reads a system prompt describing the workflow and calls the tools in sequence; intermediate state lands in the deepagents virtual filesystem:
+The `--agent` flag routes the same workflow through `docket/agent/deep_agent.py`, which wraps each pipeline stage as a LangChain `@tool` and hands the toolset to `deepagents.create_deep_agent`. A top-level planning LLM reads a system prompt describing the workflow and calls the tools in sequence; intermediate state lands in the deepagents virtual filesystem:
 
 - `/traces/manifest.json` — trace IDs in the current window
 - `/classifications/summary.json` — per-mode positive counts and errors
@@ -436,7 +436,7 @@ Until those phases land, **the practical recommendation is to use the determinis
 **Issue Drafter subagent**
 - Input: a cluster
 - Output: drafted issue (title, body, severity, labels, provenance)
-- Implementation: LLM generates draft from cluster representative + frequency stats + similar issue search results. Drafter appends an HTML-comment provenance block to the body — `<!-- agent-triage:provenance {"rubric_version":"...","mode_id":"...","cluster_id":"...","representative_trace_id":"...","run_id":"..."} -->` — and assigns labels `agent-triage`, `mode:<id>`, `rubric:<rubric-id>@<version>`.
+- Implementation: LLM generates draft from cluster representative + frequency stats + similar issue search results. Drafter appends an HTML-comment provenance block to the body — `<!-- docket:provenance {"rubric_version":"...","mode_id":"...","cluster_id":"...","representative_trace_id":"...","run_id":"..."} -->` — and assigns labels `docket`, `mode:<id>`, `rubric:<rubric-id>@<version>`.
 - Dedup: before drafting, the agent queries the tracker for open issues carrying the matching `mode:<id>` and `rubric:<rubric-id>@<version>` labels and comments on the existing issue instead of creating a new one.
 
 ### 4.4 Failure handling
@@ -447,11 +447,11 @@ Until those phases land, **the practical recommendation is to use the determinis
 - **Trace fetch failure**: log, skip the trace, continue. Report at end.
 - **Classifier failure**: up to 3 attempts total with exponential backoff. After the 3rd failed attempt, classify the trace as `unprocessed` and skip clustering for it.
 - **Backend write failure**: up to 5 attempts total. If still failing, abort the run with a clear error. We MUST NOT have a partial-write run.
-- **Tracker write failure**: queue to the configured work directory (default `~/.agent-triage/queued-issues/`) and report; don't fail the whole run.
+- **Tracker write failure**: queue to the configured work directory (default `~/.docket/queued-issues/`) and report; don't fail the whole run.
 
 ### 4.5 Observability of the triage agent itself
 
-The triage agent's own runs MUST emit OpenInference traces to a configurable backend (`instrumentation_backend` in `agent-triage.yaml`; default: Phoenix, on the assumption that an OSS-first user is already running Phoenix locally). agent-triage eats its own dogfood. Pointing `instrumentation_backend` at the same backend as the user's production traces keeps everything in one pane; pointing it at a separate instance keeps production observability clean. This also enables comparative evaluation later — we can validate the triage agent's correctness by examining its own traces.
+The triage agent's own runs MUST emit OpenInference traces to a configurable backend (`instrumentation_backend` in `docket.yaml`; default: Phoenix, on the assumption that an OSS-first user is already running Phoenix locally). docket eats its own dogfood. Pointing `instrumentation_backend` at the same backend as the user's production traces keeps everything in one pane; pointing it at a separate instance keeps production observability clean. This also enables comparative evaluation later — we can validate the triage agent's correctness by examining its own traces.
 
 ---
 
@@ -494,26 +494,26 @@ Each adapter is an MCP server exposing:
 
 **Jira, Linear, GitHub Issues** each implemented against their official APIs. All drafted issues carry provenance in two places:
 
-- An HTML-comment block at the end of the issue body — `<!-- agent-triage:provenance {JSON} -->` containing `rubric_version`, `mode_id`, `cluster_id`, `representative_trace_id`, `run_id`. Invisible to humans, parseable by the drafter on subsequent runs.
-- Tracker labels `agent-triage`, `mode:<id>`, `rubric:<rubric-id>@<version>` for queryable dedup without parsing issue bodies.
+- An HTML-comment block at the end of the issue body — `<!-- docket:provenance {JSON} -->` containing `rubric_version`, `mode_id`, `cluster_id`, `representative_trace_id`, `run_id`. Invisible to humans, parseable by the drafter on subsequent runs.
+- Tracker labels `docket`, `mode:<id>`, `rubric:<rubric-id>@<version>` for queryable dedup without parsing issue bodies.
 
 Tracker-native custom-field support is opt-in via per-tracker config in v1.1+ for users who prefer custom fields over labels (Jira and Linear only; GitHub Issues has no custom fields).
 
 ### 5.3 Adapter contract
 
-Adapters MUST be MCP servers (stdio or HTTP). The agent-triage runtime discovers them via configuration:
+Adapters MUST be MCP servers (stdio or HTTP). The docket runtime discovers them via configuration:
 
 ```yaml
-# agent-triage.yaml (runtime config)
+# docket.yaml (runtime config)
 trace_backend:
   type: mcp
-  command: agent-triage-adapter-phoenix
+  command: docket-adapter-phoenix
   env:
     PHOENIX_URL: http://localhost:6006
 
 tracker:
   type: mcp
-  command: agent-triage-adapter-jira
+  command: docket-adapter-jira
   env:
     JIRA_HOST: example.atlassian.net
     JIRA_PROJECT: EXAMPLE
@@ -523,17 +523,17 @@ The runtime invokes these as standard MCP clients. No tight coupling.
 
 **Implementation note — adapter / MCP server split.** Each backend or tracker integration is implemented as two layers:
 
-1. A pure-Python adapter class under `agent_triage/adapters/{trace,tracker}/` that owns the backend-specific logic — HTTP calls, normalization to OpenInference, retries, error mapping. The class is async, has no MCP dependency, and is unit-testable in-process.
-2. A thin MCP server entry point under `agent_triage/mcp_servers/` that instantiates the adapter class and exposes its methods as MCP tools (stdio or HTTP).
+1. A pure-Python adapter class under `docket/adapters/{trace,tracker}/` that owns the backend-specific logic — HTTP calls, normalization to OpenInference, retries, error mapping. The class is async, has no MCP dependency, and is unit-testable in-process.
+2. A thin MCP server entry point under `docket/mcp_servers/` that instantiates the adapter class and exposes its methods as MCP tools (stdio or HTTP).
 
-In v1.0 the bundled runtime drives the adapter classes in-process for the six first-party integrations; the MCP server binaries expose the same adapters to external MCP clients and to `agent-triage.yaml` configs that point at third-party MCP servers. The split keeps integration logic test-friendly while keeping MCP as the architectural seam for everything outside the first-party set. Moving the bundled runtime itself onto MCP-only wiring is a post-v1.0 decision; any such move requires the MCP tool surface to cover the full `TraceBackend` contract first (today `mark_trace_processed` / `list_processed_trace_ids` are not exposed as tools).
+In v1.0 the bundled runtime drives the adapter classes in-process for the six first-party integrations; the MCP server binaries expose the same adapters to external MCP clients and to `docket.yaml` configs that point at third-party MCP servers. The split keeps integration logic test-friendly while keeping MCP as the architectural seam for everything outside the first-party set. Moving the bundled runtime itself onto MCP-only wiring is a post-v1.0 decision; any such move requires the MCP tool surface to cover the full `TraceBackend` contract first (today `mark_trace_processed` / `list_processed_trace_ids` are not exposed as tools).
 
 ---
 
 ## 6. Repository Layout
 
 ```
-agent-triage/
+docket/
 ├── README.md
 ├── LICENSE                            # Apache 2.0
 ├── CONTRIBUTING.md
@@ -552,11 +552,11 @@ agent-triage/
 │   ├── rubric-spec.md                 # the DSL reference
 │   ├── adapters.md
 │   └── examples/
-├── agent_triage/
+├── docket/
 │   ├── __init__.py
-│   ├── __main__.py                    # CLI entry: agent-triage ...
+│   ├── __main__.py                    # CLI entry: docket ...
 │   ├── cli.py
-│   ├── config.py                      # Pydantic, loads agent-triage.yaml
+│   ├── config.py                      # Pydantic, loads docket.yaml
 │   ├── errors.py                      # typed exception hierarchy
 │   ├── runtime.py                     # top-level orchestrator
 │   ├── rubric/
@@ -651,7 +651,7 @@ agent-triage/
         └── README.md
 ```
 
-Built-in rubrics live inside the package at `agent_triage/rubric/builtin/` (so `importlib.resources` resolution works from a wheel) rather than the top-level `rubrics/` shown above; `examples/` currently holds the CI recipe.
+Built-in rubrics live inside the package at `docket/rubric/builtin/` (so `importlib.resources` resolution works from a wheel) rather than the top-level `rubrics/` shown above; `examples/` currently holds the CI recipe.
 
 ### Notes on tooling
 - `uv` for dependency management
@@ -673,14 +673,14 @@ Each phase has concrete deliverables and machine-verifiable acceptance criteria.
 **Deliverables:**
 - Repository layout as specified in §6
 - `pyproject.toml` with all production and dev dependencies
-- `agent_triage.config.Config` Pydantic model loading from `agent-triage.yaml`
-- CLI skeleton with `agent-triage --help`, `agent-triage run`, `agent-triage validate`
+- `docket.config.Config` Pydantic model loading from `docket.yaml`
+- CLI skeleton with `docket --help`, `docket run`, `docket validate`
 - CI green: ruff, mypy strict, pytest
 
 **Acceptance criteria:**
 - `uv pip install -e .` succeeds
-- `agent-triage --help` prints help
-- `agent-triage validate path/to/rubric.yaml` exits 0 on valid rubric, non-zero on invalid
+- `docket --help` prints help
+- `docket validate path/to/rubric.yaml` exits 0 on valid rubric, non-zero on invalid
 - `pytest tests/unit/test_rubric_spec.py` passes (test that Pydantic spec loads valid YAML)
 - CI passes on a clean PR
 
@@ -696,9 +696,9 @@ Each phase has concrete deliverables and machine-verifiable acceptance criteria.
 
 **Acceptance criteria:**
 - All five built-in detection types parse and validate
-- `agent-triage validate rubrics/builtin/agents/v1/rubric.yaml` exits 0
+- `docket validate rubrics/builtin/agents/v1/rubric.yaml` exits 0
 - Imports across two files merge correctly; later imports override earlier
-- 90%+ line coverage on `agent_triage/rubric/`
+- 90%+ line coverage on `docket/rubric/`
 - Examples in rubrics are exercised by self-test detector
 
 ### Phase 2: Detectors (estimated: 1-2 weekends)
@@ -706,7 +706,7 @@ Each phase has concrete deliverables and machine-verifiable acceptance criteria.
 **Deliverables:**
 - `Detector` ABC and registration system
 - All five detector implementations (`llm_judge`, `regex`, `tool_call`, `metric_threshold`, `composite`)
-- `llm_judge` uses the in-tree `agent_triage.llm.ModelProvider` ABC with `AnthropicProvider` and `OpenAIProvider` implementations (configurable per-mode). v1.0 does not depend on LiteLLM; the multi-provider abstraction is owned in-tree because structured-output enforcement is load-bearing for classifier reliability and is the exact surface where third-party multi-provider wrappers tend to leak.
+- `llm_judge` uses the in-tree `docket.llm.ModelProvider` ABC with `AnthropicProvider` and `OpenAIProvider` implementations (configurable per-mode). v1.0 does not depend on LiteLLM; the multi-provider abstraction is owned in-tree because structured-output enforcement is load-bearing for classifier reliability and is the exact surface where third-party multi-provider wrappers tend to leak.
 - Structured output enforced via each provider's native schema constraint (OpenAI's `response_format` JSON Schema mode, Anthropic's tool-use response shape)
 - Self-test mode: each rubric's examples are run through the detector and must produce the expected verdict
 
@@ -736,12 +736,12 @@ Each phase has concrete deliverables and machine-verifiable acceptance criteria.
 - Phoenix MCP server (read + annotate)
 - TraceBackend ABC
 - Phoenix Docker compose setup for integration tests
-- End-to-end CLI: `agent-triage run --rubric agents/v1 --since 1h` works against local Phoenix
+- End-to-end CLI: `docket run --rubric agents/v1 --since 1h` works against local Phoenix
 
 **Acceptance criteria:**
 - `docker compose up phoenix` starts Phoenix locally
 - A scripted ingestion populates Phoenix with 20 sample traces (10 with seeded failures, 10 clean)
-- `agent-triage run --backend phoenix --rubric agents/v1 --since 1h` classifies all 20, flags all 10 seeded failures (recall = 1.0), and achieves precision ≥ 0.9 on the 10 clean (at most 1 false positive). Any FPs are surfaced in the run report for human review.
+- `docket run --backend phoenix --rubric agents/v1 --since 1h` classifies all 20, flags all 10 seeded failures (recall = 1.0), and achieves precision ≥ 0.9 on the 10 clean (at most 1 false positive). Any FPs are surfaced in the run report for human review.
 - The triage agent's own runs are visible in Phoenix
 - Integration test runs in CI
 
@@ -789,7 +789,7 @@ Each phase has concrete deliverables and machine-verifiable acceptance criteria.
 **Deliverables:**
 - Tracker ABC
 - Jira MCP server (list, search, create, update, comment)
-- agent-triage provenance block format finalized
+- docket provenance block format finalized
 - Dedup logic: drafter searches tracker by `(rubric_version, mode_id)` tag before creating
 - Auto-post threshold logic + `--review` mode that opens drafts in a markdown editor
 
@@ -811,7 +811,7 @@ Each phase has concrete deliverables and machine-verifiable acceptance criteria.
 **Acceptance criteria:**
 - All three tracker adapters pass identical integration tests
 - All four builtin rubrics validate and pass their own self-tests
-- `pip install agent-triage` works
+- `pip install docket` works
 - README has a working quickstart
 
 ### Phase 10: v1.0 release prep (estimated: 1 weekend)
@@ -823,7 +823,7 @@ Each phase has concrete deliverables and machine-verifiable acceptance criteria.
 - Public announcement: blog post + LangChain Interrupt-style writeup
 
 **Acceptance criteria:**
-- A neutral reader can run agent-triage against their own LangSmith or Phoenix deployment in < 30 minutes
+- A neutral reader can run docket against their own LangSmith or Phoenix deployment in < 30 minutes
 - The synthetic sample rubric is published as an example
 - Tag `v1.0.0` on the repo
 
@@ -840,18 +840,18 @@ The phases below are post-v1.0 (target: v1.1). They address production-scale ope
 **Context:** at production scale the runtime needs to (a) bound per-run work so cost is predictable, (b) survive transient `get_trace` / LLM / tracker 429s without losing the run, and (c) resume from where a previous run stopped — all without an internal queue or database. The backend's annotation index already provides idempotent state; this phase makes the runtime use it.
 
 **Deliverables:**
-- `agent-triage run --sample N --strategy {uniform,stratified,errors-only}` — sampling applied after `list_traces` returns IDs but before any `get_trace` call, so the savings compound across fetch / classify / annotate. Sampling runs over the *full* listing before checkpoint subtraction (a resumed run completes the original sample; proposal 001 §C.1). `errors-only` pushes a root-error filter down through the listing's reserved `status` filter key; adapters honor it or raise. Stratified mode rebalances with *equal allocation* across an explicit attribute declared on the CLI/config — `--stratify-by {status, latency_bucket, tag:<key>}` (proposal 001 OQ-1 resolved stratification as an operational cost concern, not rubric taxonomy). Stratified-by-tenant (`tag:tenant_id`) is the production primitive that prevents large customers from swamping small ones under uniform sampling.
+- `docket run --sample N --strategy {uniform,stratified,errors-only}` — sampling applied after `list_traces` returns IDs but before any `get_trace` call, so the savings compound across fetch / classify / annotate. Sampling runs over the *full* listing before checkpoint subtraction (a resumed run completes the original sample; proposal 001 §C.1). `errors-only` pushes a root-error filter down through the listing's reserved `status` filter key; adapters honor it or raise. Stratified mode rebalances with *equal allocation* across an explicit attribute declared on the CLI/config — `--stratify-by {status, latency_bucket, tag:<key>}` (proposal 001 OQ-1 resolved stratification as an operational cost concern, not rubric taxonomy). Stratified-by-tenant (`tag:tenant_id`) is the production primitive that prevents large customers from swamping small ones under uniform sampling.
 - Resumability via existing annotations. Before classification, the pipeline queries the backend for annotations carrying this `run_id` *within the same time window*; matching trace IDs are treated as done and skipped. A killed-and-restarted run with the same `(backend, rubric, since, until)` resumes idempotently. The window scope is the state-growth mitigation: sentinel lookups don't scale with run history, only with the current window's volume.
 - **Budget gates enforced in the shared listing stage (proposal 001 Spec A).** `max_traces_per_run` measures the effective workload (post-sample, post-checkpoint) and aborts with `BudgetExceededError` before any `get_trace` call; `--max-traces` overrides per-run. `max_estimated_cost_usd`, when set, dollar-gates *every* run on the pre-flight estimate. Both apply identically in deterministic and `--agent` modes.
 - **Loud listing truncation (proposal 001 Spec B).** `TraceBackend.list_traces_v2` returns a `TraceListing` (per-trace summaries + `truncated` flag); adapters warn once and flag the listing when they stop paginating at their page ceiling (configurable via `max_list_pages` / the adapter MCP env block, e.g. `LANGSMITH_MAX_LIST_PAGES`), the run report carries a truncation banner, and `RunReport` gains `traces_listed` + `listing_truncated` for Phase 11.5's run-quality metrics. Phoenix's listing gained a real cursor pagination loop (previously a single `first: 500` query).
 - **Tracker-side truncation + dedup safety (proposal 001 OQ-4).** `Tracker.list_open_issues_v2` returns an `IssueListing` with the same `truncated` contract; GitHub/Jira/Linear page ceilings are configurable (`GITHUB_/JIRA_/LINEAR_MAX_LIST_PAGES`) and Linear gained a real cursor pagination loop (previously a single `first: 50` query). Because a truncated dedup listing makes "no duplicate found" unprovable, the poster demotes would-be auto-posts to `needs_create` (with a note in the report) rather than risking a duplicate issue; found matches remain trusted.
-- `agent-triage run --dry-run` — prints `would classify N traces × M modes ≈ $X (±X)` and exits, using the per-model price table from §8.1 decision 5. Runs the same listing/filter/sample/checkpoint/budget computation as a real run, reports trace-cap and cost-ceiling status, and exits non-zero iff the real run would abort — usable as a CI preflight gate. **Honest variance:** trace sizes vary by ~30× across deployment shapes (a single-LLM agent trace might be 500 tokens; a 10-agent orchestration with full message histories can be 50k+ tokens), so the baked default per-call shape is a wide estimate, not a tight one.
+- `docket run --dry-run` — prints `would classify N traces × M modes ≈ $X (±X)` and exits, using the per-model price table from §8.1 decision 5. Runs the same listing/filter/sample/checkpoint/budget computation as a real run, reports trace-cap and cost-ceiling status, and exits non-zero iff the real run would abort — usable as a CI preflight gate. **Honest variance:** trace sizes vary by ~30× across deployment shapes (a single-LLM agent trace might be 500 tokens; a 10-agent orchestration with full message histories can be 50k+ tokens), so the baked default per-call shape is a wide estimate, not a tight one.
 - Per-trace fetch failures already skip-with-warning as of Phase 10 hotfix work; extend to per-annotation writeback failures during the annotate stage and to tracker writes during dedup/post.
 - **Retry-with-backoff parity across all six adapters.** The LangSmith adapter ships with `_request` + `Retry-After` honoring + AIMD-aware backoff. Land equivalent retry helpers on Phoenix, Langfuse, Jira, Linear, and GitHub. Tracker rate limits (Jira Cloud ~10 req/s, GitHub 5000/hr) are real and bite when a run produces hundreds of issues.
 - A `tests/integration/test_reliability.py` that injects 30% transient backend errors and asserts the run completes with the expected skip count, plus a clean resume-from-checkpoint on the second invocation.
 
 **Acceptance criteria:**
-- `agent-triage run --sample 100 --strategy stratified --since 24h` against a backend with ≥10k traces returns 100 classified traces, with `list_traces` consuming O(10k) but classifier only O(100) LLM calls per mode.
+- `docket run --sample 100 --strategy stratified --since 24h` against a backend with ≥10k traces returns 100 classified traces, with `list_traces` consuming O(10k) but classifier only O(100) LLM calls per mode.
 - A run whose post-sample, post-checkpoint workload exceeds `max_traces_per_run` raises `BudgetExceededError` before any `get_trace` call; `max_estimated_cost_usd` (when set) aborts on the pre-flight estimate; unset config never dollar-gates. `--dry-run` exit code is non-zero iff the real run would abort, for both cap types.
 - A listing that stops at the adapter's page ceiling with a full last page surfaces as `truncated=True` plus exactly one warning, and the run report shows the truncation banner.
 - A killed-and-resumed `--sample N --checkpoint` run classifies the *originally sampled* set across both invocations — never more than N distinct traces per `run_id` (sampling precedes checkpoint subtraction).
@@ -862,7 +862,7 @@ The phases below are post-v1.0 (target: v1.1). They address production-scale ope
 
 ### Phase 11.5: Self-observability and run-quality SLOs (estimated: 1 weekend)
 
-**Context:** *"reliability"* at scale means more than *"the runtime doesn't crash"*. It includes *"the runtime tells you when it's silently wrong"*. If classification positive-rate suddenly drops 90%, the runtime will happily report "0 issues" and the operator finds out three weeks later from a customer-impacting incident. agent-triage triages other people's agents; it needs to triage itself.
+**Context:** *"reliability"* at scale means more than *"the runtime doesn't crash"*. It includes *"the runtime tells you when it's silently wrong"*. If classification positive-rate suddenly drops 90%, the runtime will happily report "0 issues" and the operator finds out three weeks later from a customer-impacting incident. docket triages other people's agents; it needs to triage itself.
 
 **Deliverables:**
 - Structured run-quality metrics emitted to the configured `--instrument-to` Phoenix endpoint *and* logged at run-end in a `runs/{run_id}.metrics.json` file:
@@ -871,12 +871,12 @@ The phases below are post-v1.0 (target: v1.1). They address production-scale ope
   - `llm_429_count`, `backend_429_count`, `tracker_429_count`
   - `mean_input_tokens_per_call`, `mean_output_tokens_per_call`, `total_cost_usd`
   - `wall_time_per_stage` (list / fetch / classify / cluster / draft / post)
-- A built-in `agent_triage.dev/builtin/self/v1` rubric that classifies agent-triage's own traces for known runtime failure modes: stuck-in-retry-loop, positive-rate-collapse, backend-listing-empty-but-window-non-empty, adapter-call-stale (latency outlier). This eats our own dog food.
-- A `agent-triage health --since 7d` command that reads the metrics files (or Phoenix annotations) for the last N runs and reports trend deltas — positive-rate slope, skip-rate slope, cost trajectory. Operator-facing, not a service.
+- A built-in `docket.dev/builtin/self/v1` rubric that classifies docket's own traces for known runtime failure modes: stuck-in-retry-loop, positive-rate-collapse, backend-listing-empty-but-window-non-empty, adapter-call-stale (latency outlier). This eats our own dog food.
+- A `docket health --since 7d` command that reads the metrics files (or Phoenix annotations) for the last N runs and reports trend deltas — positive-rate slope, skip-rate slope, cost trajectory. Operator-facing, not a service.
 - Documented Phoenix dashboard JSON in `docs/dashboards/` that consumers can import.
 
 **Acceptance criteria:**
-- A deliberate rubric regression (rubric where every mode's detector unconditionally returns negative) is caught by `self/v1` and surfaces in `agent-triage health` as a positive-rate-collapse alert within one run.
+- A deliberate rubric regression (rubric where every mode's detector unconditionally returns negative) is caught by `self/v1` and surfaces in `docket health` as a positive-rate-collapse alert within one run.
 - Metrics emitted by a real run match the post-hoc trace inspection within ±1 trace count.
 
 ### Phase 12: Streaming pipeline and adaptive concurrency (estimated: 2-3 weekends)
@@ -902,8 +902,8 @@ The phases below are post-v1.0 (target: v1.1). They address production-scale ope
 **Context:** at sub-hourly cadence with millions of traces per window, even an adaptive single-process pipeline can't keep up. The natural unit of horizontal parallelism is the time window; multiple workers each handle a disjoint sub-window. Clustering, however, needs a global view — so it becomes a separate post-shard step. **And the global step itself isn't free** at this scale: HDBSCAN on 100k+ positive embeddings is non-trivial and may need an approximate algorithm.
 
 **Deliverables:**
-- `agent-triage run --window-shard K/N` partitions `[since, until]` into N disjoint sub-windows and runs shard K. The default `run_id` derivation includes shard coordinates so concurrent shards never collide on annotation upserts.
-- A new top-level command `agent-triage cluster --since 1h --rubric ...` that reads positive annotations across all shards in the window and produces global clusters + drafts. This decouples the O(N) classify stage (parallelizable freely across shards) from the O(positives) cluster stage (must be global per mode).
+- `docket run --window-shard K/N` partitions `[since, until]` into N disjoint sub-windows and runs shard K. The default `run_id` derivation includes shard coordinates so concurrent shards never collide on annotation upserts.
+- A new top-level command `docket cluster --since 1h --rubric ...` that reads positive annotations across all shards in the window and produces global clusters + drafts. This decouples the O(N) classify stage (parallelizable freely across shards) from the O(positives) cluster stage (must be global per mode).
 - **Approximate clustering above a threshold.** Up to ~10k positives per mode, use HDBSCAN as today. Above that, fall back to mini-batch K-Means + cosine distance (or LSH-bucketed HDBSCAN over buckets) and document the precision/recall trade-off vs. exact HDBSCAN on a 100k-positive fixture. Configurable per-rubric via `clustering.large_scale_algorithm`.
 - **Within-cluster representative selection.** Today the representative trace is the centroid. Add `representative_strategy ∈ {centroid, most-recent, highest-evidence-score, most-surprising}` so operators investigating production failures get the *useful* sample, not the median one.
 - `docs/scaling.md` runbook showing N=4 hourly shards each running for ~15 minutes against a backend holding ~600k traces, then a single `cluster` command consuming the output. Cron / Airflow recipes included.
@@ -927,7 +927,7 @@ The phases below are post-v1.0 (target: v1.1). They address production-scale ope
 - **Multi-backend dispatch.** Extend `_AgentState` to hold a `dict[str, TraceBackend]` keyed by backend id, and add a `list_backends()` + a backend-selection argument on the query tools. Lets a single agent invocation triage across (e.g.) Phoenix + Langfuse when an org runs both. Adapter construction stays config-driven; the agent picks among already-instantiated adapters, never constructs new ones.
 - **Composite-mode step surfacing.** The rubric DSL's `composite` detection type today executes inside the classifier subagent as one atomic call. Add `evaluate_composite_step(trace_id, mode_id, step_name)` that exposes each sub-step (e.g. "check tool arg schema", "cross-reference Linear issue") as an individually callable tool. The classifier subagent gains a hook to delegate to the harness when running composite modes under `--agent`, enabling hypothesis-driven multi-step investigation while keeping deterministic-mode behavior unchanged.
 - **System-prompt rework.** The current prompt prescribes the six-stage workflow rigidly. Add a second prompt template for "investigative mode" that describes the tool surface as a library rather than a workflow, with examples of common investigation patterns. CLI flag `--agent-mode {workflow,investigative}` selects between them; workflow is the default for backward-compat.
-- **Tool-level observability.** Every new tool emits an OpenTelemetry span via the existing `agent_triage.observability` module, with attributes for backend id, mode id, trace id, and any model override. Same redaction guarantees as the existing pipeline.
+- **Tool-level observability.** Every new tool emits an OpenTelemetry span via the existing `docket.observability` module, with attributes for backend id, mode id, trace id, and any model override. Same redaction guarantees as the existing pipeline.
 
 **Acceptance criteria:**
 - An integration test invokes the agent with an instruction like "find any traces in the last 24h where `tool_call_loop` and `latency_spike` co-occur, then re-classify them with sonnet" and the agent calls `query_by_mode` twice, intersects the results, and calls `reclassify_trace` per match. Run produces a report with the intersected set.
@@ -938,22 +938,22 @@ The phases below are post-v1.0 (target: v1.1). They address production-scale ope
 
 ### Phase 15: Interactive triage surfaces (estimated: 3-4 weekends)
 
-**Context:** Phase 14 gives the agent enough tools to investigate. Phase 15 gives operators a way to *talk to it*. Today `agent-triage run --agent` is a one-shot CLI invocation with a canned instruction; the harness can't be driven from a chat client, can't accept follow-up questions, and can't be invoked by another agent through MCP. This phase ships the entry points that turn the harness into an interactive triage surface — the actual payoff for shipping `--agent` in the first place.
+**Context:** Phase 14 gives the agent enough tools to investigate. Phase 15 gives operators a way to *talk to it*. Today `docket run --agent` is a one-shot CLI invocation with a canned instruction; the harness can't be driven from a chat client, can't accept follow-up questions, and can't be invoked by another agent through MCP. This phase ships the entry points that turn the harness into an interactive triage surface — the actual payoff for shipping `--agent` in the first place.
 
 **Deliverables:**
-- **`agent-triage chat` REPL.** A line-based chat loop that keeps a single deepagents instance alive across turns, persists conversation history in the vfs at `/conversations/{session_id}.jsonl`, and accepts freeform operator instructions ("look at the last hour, flag anything related to the auth service deploy"). Supports `/save <path>` to export the final report, `/reset` to clear history without restarting the process, and `/show <vfs-path>` to inspect intermediate artifacts. Session persistence is opt-in via `--session <id>`; default is ephemeral.
-- **`agent-triage-server` MCP server.** Exposes the same tool surface as Phase 14's harness over MCP stdio + HTTP, so the agent itself can be invoked from any MCP-aware client (Slack bots, IDE assistants, other Deep Agents). Tools are namespaced under `triage.*` (e.g. `triage.query_by_mode`, `triage.reclassify_trace`). Auth via bearer token from `AGENT_TRIAGE_MCP_TOKEN` env var; rejects unauthenticated calls. New entry in `pyproject.toml` `[project.scripts]`.
-- **Slack integration recipe.** A reference Slack bolt app in `examples/slack-bot/` that wraps `agent-triage-server` and routes `/triage` slash commands and DMs to the chat REPL. Not a first-class shipped binary — kept as an example so users can adapt it without taking a Slack-SDK dependency on the core package.
-- **Rubric authoring loop.** Add `agent-triage rubric edit <rubric-uri> --interactive` that opens a REPL with rubric-edit tools (`add_mode`, `edit_mode`, `remove_mode`, `dry_run_mode_against_traces`, `compare_modes`) and the Phase 14 query tools. The agent can suggest threshold adjustments, dry-run a new mode against last week's traces, and diff against an existing rubric — all without leaving the REPL. Writes back to a YAML file on disk; never modifies the registry directly.
+- **`docket chat` REPL.** A line-based chat loop that keeps a single deepagents instance alive across turns, persists conversation history in the vfs at `/conversations/{session_id}.jsonl`, and accepts freeform operator instructions ("look at the last hour, flag anything related to the auth service deploy"). Supports `/save <path>` to export the final report, `/reset` to clear history without restarting the process, and `/show <vfs-path>` to inspect intermediate artifacts. Session persistence is opt-in via `--session <id>`; default is ephemeral.
+- **`docket-server` MCP server.** Exposes the same tool surface as Phase 14's harness over MCP stdio + HTTP, so the agent itself can be invoked from any MCP-aware client (Slack bots, IDE assistants, other Deep Agents). Tools are namespaced under `triage.*` (e.g. `triage.query_by_mode`, `triage.reclassify_trace`). Auth via bearer token from `DOCKET_MCP_TOKEN` env var; rejects unauthenticated calls. New entry in `pyproject.toml` `[project.scripts]`.
+- **Slack integration recipe.** A reference Slack bolt app in `examples/slack-bot/` that wraps `docket-server` and routes `/triage` slash commands and DMs to the chat REPL. Not a first-class shipped binary — kept as an example so users can adapt it without taking a Slack-SDK dependency on the core package.
+- **Rubric authoring loop.** Add `docket rubric edit <rubric-uri> --interactive` that opens a REPL with rubric-edit tools (`add_mode`, `edit_mode`, `remove_mode`, `dry_run_mode_against_traces`, `compare_modes`) and the Phase 14 query tools. The agent can suggest threshold adjustments, dry-run a new mode against last week's traces, and diff against an existing rubric — all without leaving the REPL. Writes back to a YAML file on disk; never modifies the registry directly.
 - **Conversation-aware idempotency.** When a chat session triggers multiple runs across the same window, dedup uses the session's `run_id` deterministically; follow-up queries within a session reuse cached classifications rather than re-classifying. `/reset` clears the cache.
 - **Observability hooks.** Every chat turn emits a span with the operator instruction (redacted), tool calls made, tokens consumed, and final response length. Goes to the same OTLP endpoint as pipeline runs.
 
 **Acceptance criteria:**
-- `agent-triage chat` accepts a session of at least 3 turns ("triage the last hour", "now focus on auth service", "draft an issue for the highest-severity cluster") and produces a coherent report. Recorded against a fixture backend in an integration test.
+- `docket chat` accepts a session of at least 3 turns ("triage the last hour", "now focus on auth service", "draft an issue for the highest-severity cluster") and produces a coherent report. Recorded against a fixture backend in an integration test.
 - The MCP server passes the standard MCP conformance suite (tool discovery, tool invocation, error responses) and a separate test that exercises every namespaced `triage.*` tool over stdio.
-- `agent-triage rubric edit` round-trips a rubric: load → add mode → dry-run against fixture → save → reload validates clean. New YAML matches a golden file modulo timestamps.
+- `docket rubric edit` round-trips a rubric: load → add mode → dry-run against fixture → save → reload validates clean. New YAML matches a golden file modulo timestamps.
 - The Slack example bot in `examples/slack-bot/` has a README walkthrough and a `docker-compose.yml` that runs it against a mock backend; manually-verified screenshot in the README.
-- A 10-turn session uses no more total tokens than 10 independent `agent-triage run --agent` invocations would (cache hit rate ≥80% measured by the conversation-aware idempotency mechanism).
+- A 10-turn session uses no more total tokens than 10 independent `docket run --agent` invocations would (cache hit rate ≥80% measured by the conversation-aware idempotency mechanism).
 
 **Total estimated effort for Phases 14+15: 5-7 weekends.** Phase 14 must land before Phase 15 — the chat REPL is only useful if the agent has tools beyond the six-stage pipeline. Within Phase 15, the chat REPL ships first; MCP server second (depends on REPL session model); rubric authoring loop and Slack example land last as independent extensions.
 
@@ -965,15 +965,15 @@ The phases below are post-v1.0 (target: v1.1). They address production-scale ope
 
 The following design questions were resolved during pre-implementation review. Sections of the spec affected by each decision are noted in parentheses.
 
-1. **OpenInference models — depend on official constants; own the Pydantic layer.** The `openinference-semantic-conventions` package supplies attribute-name constants, not Pydantic models. agent-triage depends on that package for constants and implements its own Pydantic v2 trace models. Pin to a compatible-upper-bound version range; CI matrix tests the current + previous minor to catch spec churn early. (§3, §6, §8.2.3) *Implementation note: v1.0 currently inlines the attribute-name constants; adding the dependency is pending maintainer sign-off.*
+1. **OpenInference models — depend on official constants; own the Pydantic layer.** The `openinference-semantic-conventions` package supplies attribute-name constants, not Pydantic models. docket depends on that package for constants and implements its own Pydantic v2 trace models. Pin to a compatible-upper-bound version range; CI matrix tests the current + previous minor to catch spec churn early. (§3, §6, §8.2.3) *Implementation note: v1.0 currently inlines the attribute-name constants; adding the dependency is pending maintainer sign-off.*
 
-2. **Tracker provenance — HTML comment in body + labels.** Every drafted issue carries an HTML-comment provenance block at the end of the body (parseable, invisible to humans, robust to accidental editing) plus tracker labels for queryable dedup: `agent-triage`, `mode:<id>`, `rubric:<rubric-id>@<version>`. Comment format: `<!-- agent-triage:provenance {JSON payload} -->` containing `rubric_version`, `mode_id`, `cluster_id`, `representative_trace_id`, `run_id`. Tracker-native custom-field support is deferred to v1.1+ as an opt-in for Jira/Linear users who prefer it; GitHub Issues has no custom fields, so labels are the only uniform mechanism. (§4.3, §5.2)
+2. **Tracker provenance — HTML comment in body + labels.** Every drafted issue carries an HTML-comment provenance block at the end of the body (parseable, invisible to humans, robust to accidental editing) plus tracker labels for queryable dedup: `docket`, `mode:<id>`, `rubric:<rubric-id>@<version>`. Comment format: `<!-- docket:provenance {JSON payload} -->` containing `rubric_version`, `mode_id`, `cluster_id`, `representative_trace_id`, `run_id`. Tracker-native custom-field support is deferred to v1.1+ as an opt-in for Jira/Linear users who prefer it; GitHub Issues has no custom fields, so labels are the only uniform mechanism. (§4.3, §5.2)
 
-3. **Rubric import schemes — filesystem and packaged built-ins in v1.0.** v1.0 supports `file://<path>` (absolute or relative to the importing rubric file) and `agent-triage.dev/builtin/<rubric>/<version>` (resolved against packaged data via `importlib.resources`). v1.1 adds `https://` and a `registry://` scheme backed by HTTPS lookup with checksum pinning. No network fetches in the v1.0 validation path. (§3.2)
+3. **Rubric import schemes — filesystem and packaged built-ins in v1.0.** v1.0 supports `file://<path>` (absolute or relative to the importing rubric file) and `docket.dev/builtin/<rubric>/<version>` (resolved against packaged data via `importlib.resources`). v1.1 adds `https://` and a `registry://` scheme backed by HTTPS lookup with checksum pinning. No network fetches in the v1.0 validation path. (§3.2)
 
-4. **Model provider abstraction — roll our own; defer LiteLLM.** v1.0 ships an `agent_triage.llm.ModelProvider` ABC with two implementations (`AnthropicProvider`, `OpenAIProvider`). Each uses its provider's native structured-output mechanism — OpenAI `response_format` JSON Schema mode, Anthropic tool-use output shape — because schema enforcement is load-bearing for classifier reliability and is the exact place where multi-provider abstractions historically leak. v1.1 may add an optional `LiteLLMProvider` for long-tail providers; v1.0 does not depend on LiteLLM. (§6, §7 Phase 2)
+4. **Model provider abstraction — roll our own; defer LiteLLM.** v1.0 ships an `docket.llm.ModelProvider` ABC with two implementations (`AnthropicProvider`, `OpenAIProvider`). Each uses its provider's native structured-output mechanism — OpenAI `response_format` JSON Schema mode, Anthropic tool-use output shape — because schema enforcement is load-bearing for classifier reliability and is the exact place where multi-provider abstractions historically leak. v1.1 may add an optional `LiteLLMProvider` for long-tail providers; v1.0 does not depend on LiteLLM. (§6, §7 Phase 2)
 
-5. **Cost controls — hard cap + concrete dry-run.** Default `max_traces_per_run: 1000` in `agent-triage.yaml`, configurable. Exceeding the cap raises an error rather than silently truncating, forcing the operator to partition explicitly. `agent-triage run --dry-run` reports: candidate trace count in the window, modes per trace, expected LLM call count after batching, and projected cost computed from a per-model price table baked into the package and overridable in config. (§8.2.5)
+5. **Cost controls — hard cap + concrete dry-run.** Default `max_traces_per_run: 1000` in `docket.yaml`, configurable. Exceeding the cap raises an error rather than silently truncating, forcing the operator to partition explicitly. `docket run --dry-run` reports: candidate trace count in the window, modes per trace, expected LLM call count after batching, and projected cost computed from a per-model price table baked into the package and overridable in config. (§8.2.5)
 
 ### 8.2 Risks
 
@@ -983,7 +983,7 @@ The following design questions were resolved during pre-implementation review. S
 
 3. **MCP protocol churn.** MCP is maturing rapidly; tool-use semantics could change. Mitigation: pin to known-stable MCP SDK versions; track the protocol's release notes.
 
-4. **Classifier cost runaway.** A naive run on 10k traces with a 10-mode rubric is 100k LLM calls. Mitigation: budget mode batching + hard cap + cost preview before run (`agent-triage run --dry-run` reports expected cost).
+4. **Classifier cost runaway.** A naive run on 10k traces with a 10-mode rubric is 100k LLM calls. Mitigation: budget mode batching + hard cap + cost preview before run (`docket run --dry-run` reports expected cost).
 
 5. **Maintenance burden of N adapters.** Six adapters × ongoing API changes = sustained maintenance. Mitigation: aggressive integration test coverage, with daily CI runs against the adapters; community ownership model for less-common backends.
 
@@ -1021,7 +1021,7 @@ The following design questions were resolved during pre-implementation review. S
 
 ## Appendix B: Out of Scope but Adjacent
 
-- **Eval auto-generation from triage clusters** — v1.0 ships the minimal half of this: `agent-triage run --emit-evals <dir>` exports each qualifying cluster as a portable JSON candidate eval case (representative excerpt, mode, expected verdict, member trace IDs, provenance), satisfying mission item §1.1.5. LLM-driven *generation* of executable evals (and adapters into `agentevals` / DeepEval) remains v1.1 work.
-- **Adversarial neighborhood expansion** — generate semantically equivalent variants of failing traces to assert robustness. Likely a separate companion library, `agent-triage-adversarial`.
+- **Eval auto-generation from triage clusters** — v1.0 ships the minimal half of this: `docket run --emit-evals <dir>` exports each qualifying cluster as a portable JSON candidate eval case (representative excerpt, mode, expected verdict, member trace IDs, provenance), satisfying mission item §1.1.5. LLM-driven *generation* of executable evals (and adapters into `agentevals` / DeepEval) remains v1.1 work.
+- **Adversarial neighborhood expansion** — generate semantically equivalent variants of failing traces to assert robustness. Likely a separate companion library, `docket-adversarial`.
 - **MASEval orchestration-pattern comparison layer** — separate project on a longer arc. Could share rubric DSL infrastructure if MASEval maintainers want it.
 - **Web UI for review** — out of scope for v1.0; users review in their existing tracker. v1.x or never.

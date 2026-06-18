@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from agent_triage.adapters.base import TraceBackend
-from agent_triage.agent.deep_agent import (
+from docket.adapters.base import TraceBackend
+from docket.agent.deep_agent import (
     DEFAULT_AGENT_MODEL,
     _ack,
     _AgentState,
@@ -26,11 +26,11 @@ from agent_triage.agent.deep_agent import (
     build_triage_agent,
     extract_report_markdown,
 )
-from agent_triage.llm.base import ModelProvider
-from agent_triage.llm.embeddings import EmbeddingProvider
-from agent_triage.models.classification import Annotation
-from agent_triage.models.trace import OpenInferenceTrace, Span
-from agent_triage.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
+from docket.llm.base import ModelProvider
+from docket.llm.embeddings import EmbeddingProvider
+from docket.models.classification import Annotation
+from docket.models.trace import OpenInferenceTrace, Span
+from docket.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
 
 
 class _FakeBackend(TraceBackend):
@@ -97,7 +97,7 @@ def _trace(trace_id: str, text: str) -> OpenInferenceTrace:
 
 def _rubric() -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="testbench", version="0.1.0"),
         modes=[
@@ -225,7 +225,7 @@ async def test_full_tool_chain_produces_report(tmp_path: Path) -> None:
     files = write_result.update["files"]
     assert "/report.md" in files
     report_md = files["/report.md"]["content"]
-    assert "# agent-triage run" in report_md
+    assert "# docket run" in report_md
     assert "## Clusters" in report_md
     assert state.clusters
     assert state.drafts

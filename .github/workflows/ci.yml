@@ -26,6 +26,6 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
       - name: Mypy
-        run: mypy --strict agent_triage
+        run: mypy --strict docket
       - name: Pytest
         run: pytest -v

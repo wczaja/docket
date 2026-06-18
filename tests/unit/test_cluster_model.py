@@ -1,4 +1,4 @@
-from agent_triage.models.cluster import Cluster, ClusterStats, compute_cluster_id
+from docket.models.cluster import Cluster, ClusterStats, compute_cluster_id
 
 
 def test_compute_cluster_id_is_deterministic() -> None:

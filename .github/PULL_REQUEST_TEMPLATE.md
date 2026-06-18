@@ -5,7 +5,7 @@
 ## Checklist
 
 - [ ] `ruff check .` and `ruff format --check .` pass
-- [ ] `mypy --strict agent_triage` passes
+- [ ] `mypy --strict docket` passes
 - [ ] `pytest` passes locally (coverage gate: 90%)
 - [ ] New behavior is covered by tests
 - [ ] Any rubric/fixture/doc content added is **synthetic** (no real

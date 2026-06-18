@@ -1,4 +1,4 @@
-from agent_triage.observability import redact
+from docket.observability import redact
 
 
 def test_redact_email() -> None:

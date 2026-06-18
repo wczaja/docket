@@ -1,12 +1,12 @@
-# Rubric DSL reference (`agent-triage.dev/v1`)
+# Rubric DSL reference (`docket.dev/v1`)
 
-A **rubric** is a YAML document declaring the failure modes agent-triage
+A **rubric** is a YAML document declaring the failure modes docket
 classifies traces against, plus how positives are clustered and what
 happens to the resulting issue drafts. This page is the normative
-reference for `apiVersion: agent-triage.dev/v1`; it matches the Pydantic
-models in `agent_triage/rubric/spec.py` and the JSON Schema in
-`agent_triage/rubric/schemas/v1.json` (both are enforced — you get the
-same errors from `agent-triage validate` regardless of tooling).
+reference for `apiVersion: docket.dev/v1`; it matches the Pydantic
+models in `docket/rubric/spec.py` and the JSON Schema in
+`docket/rubric/schemas/v1.json` (both are enforced — you get the
+same errors from `docket validate` regardless of tooling).
 
 A complete worked example lives at
 [`rubrics/examples/sample-support-agent.yaml`](../rubrics/examples/sample-support-agent.yaml).
@@ -14,7 +14,7 @@ A complete worked example lives at
 ## Top-level structure
 
 ```yaml
-apiVersion: agent-triage.dev/v1   # required; exactly this for v1
+apiVersion: docket.dev/v1   # required; exactly this for v1
 kind: Rubric                      # required; exactly "Rubric"
 metadata:                         # required
   name: my-prod-agents            # required
@@ -153,7 +153,7 @@ detection:
 
 ## Examples
 
-Examples make a mode self-testing: `agent-triage self-test` runs each
+Examples make a mode self-testing: `docket self-test` runs each
 one through the mode's detector and asserts the expected verdict. They
 are optional but strongly recommended for `llm_judge` modes — they're
 your regression suite against judge-prompt drift. (In v1.0, self-test
@@ -177,7 +177,7 @@ path; `https://` and `registry://` are reserved for later versions):
 
 ```yaml
 imports:
-  - agent-triage.dev/builtin/agents/v1      # packaged builtin
+  - docket.dev/builtin/agents/v1      # packaged builtin
   - file://./shared/common.yaml             # absolute, or relative to this file
 ```
 
@@ -197,10 +197,10 @@ mode.
 
 | URI | Covers |
 |---|---|
-| `agent-triage.dev/builtin/agents/v1` | generic agent failures (hallucination, loops, premature termination, unsafe tools, prompt leakage, bad handoff) |
-| `agent-triage.dev/builtin/rag/v1` | retrieval failures |
-| `agent-triage.dev/builtin/routing/v1` | supervisor/router failures |
-| `agent-triage.dev/builtin/multi-agent/v1` | orchestration failures |
+| `docket.dev/builtin/agents/v1` | generic agent failures (hallucination, loops, premature termination, unsafe tools, prompt leakage, bad handoff) |
+| `docket.dev/builtin/rag/v1` | retrieval failures |
+| `docket.dev/builtin/routing/v1` | supervisor/router failures |
+| `docket.dev/builtin/multi-agent/v1` | orchestration failures |
 
 ## Clustering
 
@@ -238,9 +238,9 @@ nothing; drafts queue locally for `--review`. The CLI flag
 
 ## Validation rules (summary)
 
-`agent-triage validate <source>` enforces, in one pass:
+`docket validate <source>` enforces, in one pass:
 
-- `apiVersion` is exactly `agent-triage.dev/v1` (anything else is
+- `apiVersion` is exactly `docket.dev/v1` (anything else is
   refused with the supported list — design §3.6's migration message)
 - `kind: Rubric`; `metadata.name` and `metadata.version` present
 - every mode `id` matches `^[a-z0-9][a-z0-9-]*$` and is unique

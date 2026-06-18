@@ -10,17 +10,17 @@ from typing import Any
 
 import pytest
 
-import agent_triage.mcp_servers._tracker_common as _tracker_common
-from agent_triage.adapters.base import Tracker
-from agent_triage.errors import TrackerError
-from agent_triage.mcp_servers.adapter_github import SERVER_NAME as GITHUB_SERVER_NAME
-from agent_triage.mcp_servers.adapter_jira import (
+import docket.mcp_servers._tracker_common as _tracker_common
+from docket.adapters.base import Tracker
+from docket.errors import TrackerError
+from docket.mcp_servers.adapter_github import SERVER_NAME as GITHUB_SERVER_NAME
+from docket.mcp_servers.adapter_jira import (
     SERVER_NAME,
     TRACKER_TOOLS,
     dispatch_tracker_tool,
 )
-from agent_triage.mcp_servers.adapter_linear import SERVER_NAME as LINEAR_SERVER_NAME
-from agent_triage.models.issue import Issue, IssueDraft, IssuePatch
+from docket.mcp_servers.adapter_linear import SERVER_NAME as LINEAR_SERVER_NAME
+from docket.models.issue import Issue, IssueDraft, IssuePatch
 
 
 class _FakeTracker(Tracker):
@@ -68,7 +68,7 @@ def _draft_payload() -> dict[str, Any]:
         "member_trace_ids": ["t-1"],
         "title": "title",
         "body": "body",
-        "labels": ["agent-triage"],
+        "labels": ["docket"],
     }
 
 
@@ -84,15 +84,15 @@ def test_tool_manifest_lists_all_five_methods() -> None:
 
 
 def test_server_name() -> None:
-    assert SERVER_NAME == "agent-triage-adapter-jira"
+    assert SERVER_NAME == "docket-adapter-jira"
 
 
 def test_linear_server_name() -> None:
-    assert LINEAR_SERVER_NAME == "agent-triage-adapter-linear"
+    assert LINEAR_SERVER_NAME == "docket-adapter-linear"
 
 
 def test_github_server_name() -> None:
-    assert GITHUB_SERVER_NAME == "agent-triage-adapter-github"
+    assert GITHUB_SERVER_NAME == "docket-adapter-github"
 
 
 async def test_dispatch_list_open_issues_passes_filter() -> None:
@@ -100,12 +100,12 @@ async def test_dispatch_list_open_issues_passes_filter() -> None:
     result = await dispatch_tracker_tool(
         tracker,
         "list_open_issues",
-        {"filter": {"labels": ["agent-triage", "mode:hallucination"]}},
+        {"filter": {"labels": ["docket", "mode:hallucination"]}},
     )
     payload = json.loads(result)
     assert isinstance(payload, list)
     assert payload[0]["id"] == "1"
-    assert tracker.list_filters[0] == {"labels": ["agent-triage", "mode:hallucination"]}
+    assert tracker.list_filters[0] == {"labels": ["docket", "mode:hallucination"]}
 
 
 async def test_dispatch_list_open_issues_without_filter() -> None:

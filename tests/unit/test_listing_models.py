@@ -1,11 +1,11 @@
-"""Unit tests for `agent_triage.models.listing` (proposal 001 Specs B + C)."""
+"""Unit tests for `docket.models.listing` (proposal 001 Specs B + C)."""
 
 from datetime import UTC, datetime
 
 import pytest
 
-from agent_triage.errors import BackendError
-from agent_triage.models.listing import (
+from docket.errors import BackendError
+from docket.models.listing import (
     RESERVED_FILTER_KEYS,
     TraceFilter,
     TraceListing,

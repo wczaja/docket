@@ -6,7 +6,7 @@ Usage::
     python scripts/ingest_acceptance_traces.py --phoenix-url http://localhost:6006
 
 Posts the 20-trace fixture (10 clean + 10 seeded failures) from
-`agent_triage._acceptance` to Phoenix's OTLP HTTP endpoint at /v1/traces.
+`docket._acceptance` to Phoenix's OTLP HTTP endpoint at /v1/traces.
 Prints a one-line manifest per trace plus a summary.
 """
 
@@ -17,8 +17,8 @@ import sys
 
 import httpx
 
-from agent_triage._acceptance import acceptance_summary, build_acceptance_cases
-from agent_triage.models.otlp import to_otlp
+from docket._acceptance import acceptance_summary, build_acceptance_cases
+from docket.models.otlp import to_otlp
 
 
 async def ingest_all(phoenix_url: str) -> int:

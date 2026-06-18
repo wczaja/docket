@@ -21,11 +21,11 @@ import httpx
 import pytest
 from langchain_core.messages import HumanMessage
 
-from agent_triage._acceptance import build_acceptance_cases
-from agent_triage.adapters.trace.phoenix import PhoenixAdapter
-from agent_triage.agent.deep_agent import build_triage_agent, extract_report_markdown
-from agent_triage.llm import build_embedding_provider, build_provider
-from agent_triage.rubric.loader import load_rubric
+from docket._acceptance import build_acceptance_cases
+from docket.adapters.trace.phoenix import PhoenixAdapter
+from docket.agent.deep_agent import build_triage_agent, extract_report_markdown
+from docket.llm import build_embedding_provider, build_provider
+from docket.rubric.loader import load_rubric
 
 pytestmark = pytest.mark.integration
 
@@ -96,7 +96,7 @@ async def test_deep_agent_runs_workflow_against_phoenix(
 
     # 2. Build the Deep Agent and let it drive the workflow.
     adapter = PhoenixAdapter(base_url=phoenix_url)
-    rubric = load_rubric("agent-triage.dev/builtin/agents/v1")
+    rubric = load_rubric("docket.dev/builtin/agents/v1")
     llm_provider = build_provider("anthropic:claude-haiku-4-5-20251001")
     embedding_provider = build_embedding_provider("openai:text-embedding-3-small")
     now = datetime.now(UTC)
@@ -130,7 +130,7 @@ async def test_deep_agent_runs_workflow_against_phoenix(
     # demand recall=1.0 / precision>=0.9 here.
     report_md = extract_report_markdown(final_state)
     assert report_md, "agent did not write /report.md"
-    assert "# agent-triage run" in report_md
+    assert "# docket run" in report_md
     assert state.trace_ids, "agent did not call list_traces"
     assert state.classifications, "agent did not call classify_traces"
 

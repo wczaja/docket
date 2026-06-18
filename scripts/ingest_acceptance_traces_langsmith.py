@@ -5,10 +5,10 @@ Usage::
 
     LANGSMITH_API_KEY=ls-... \\
         python scripts/ingest_acceptance_traces_langsmith.py \\
-        --project agent-triage-e2e
+        --project docket-e2e
 
 Posts the 20-trace fixture (10 clean + 10 seeded failures) from
-`agent_triage._acceptance` to LangSmith's batch runs endpoint at
+`docket._acceptance` to LangSmith's batch runs endpoint at
 `/api/v1/runs/batch`. Prints a one-line manifest per trace plus a summary.
 
 LangSmith's run shape and OpenInference's span shape don't line up 1:1;
@@ -30,8 +30,8 @@ from typing import Any
 
 import httpx
 
-from agent_triage._acceptance import acceptance_summary, build_acceptance_cases
-from agent_triage.models.trace import OpenInferenceTrace, Span
+from docket._acceptance import acceptance_summary, build_acceptance_cases
+from docket.models.trace import OpenInferenceTrace, Span
 
 DEFAULT_LANGSMITH_ENDPOINT = "https://api.smith.langchain.com"
 

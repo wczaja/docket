@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from agent_triage.agent.evals import emit_eval_cases
-from agent_triage.models.cluster import Cluster, ClusterStats
-from agent_triage.models.eval_case import EVAL_CASE_SCHEMA, EvalCase
-from agent_triage.rubric.loader import load_rubric
+from docket.agent.evals import emit_eval_cases
+from docket.models.cluster import Cluster, ClusterStats
+from docket.models.eval_case import EVAL_CASE_SCHEMA, EvalCase
+from docket.rubric.loader import load_rubric
 
 FIXTURES = Path(__file__).parent / "fixtures" / "rubrics"
 

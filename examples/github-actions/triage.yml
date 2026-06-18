@@ -1,6 +1,6 @@
-# Scheduled agent-triage run — copy into .github/workflows/ of your repo.
+# Scheduled docket run — copy into .github/workflows/ of your repo.
 # See docs/triage-as-ci.md for the full walkthrough and knob explanations.
-name: agent-triage
+name: docket
 
 on:
   schedule:
@@ -18,8 +18,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install agent-triage
-        run: pip install agent-triage
+      - name: Install docket
+        run: pip install docket
 
       - name: Run triage
         env:
@@ -31,13 +31,13 @@ jobs:
           # workflow token, which is scoped to this repo only).
           GITHUB_TOKEN: ${{ secrets.TRIAGE_GITHUB_TOKEN }}
         run: |
-          agent-triage run \
+          docket run \
             --backend phoenix \
             --phoenix-url "${{ vars.PHOENIX_URL }}" \
             --tracker github \
             --github-owner "${{ github.repository_owner }}" \
             --github-repo agent-issues \
-            --rubric agent-triage.dev/builtin/agents/v1 \
+            --rubric docket.dev/builtin/agents/v1 \
             --since 2h \
             --queue-dir ./triage-queue \
             --emit-evals ./eval-cases \

@@ -1,7 +1,7 @@
 services:
   phoenix:
     image: arizephoenix/phoenix:latest
-    container_name: agent-triage-phoenix
+    container_name: docket-phoenix
     ports:
       - "6006:6006"
       - "4317:4317"
@@ -17,7 +17,7 @@ services:
 
   langfuse-db:
     image: postgres:16-alpine
-    container_name: agent-triage-langfuse-db
+    container_name: docket-langfuse-db
     environment:
       POSTGRES_USER: langfuse
       POSTGRES_PASSWORD: langfuse
@@ -32,7 +32,7 @@ services:
 
   langfuse:
     image: langfuse/langfuse:2
-    container_name: agent-triage-langfuse
+    container_name: docket-langfuse
     depends_on:
       langfuse-db:
         condition: service_healthy
@@ -44,8 +44,8 @@ services:
       NEXTAUTH_SECRET: dev-secret-not-for-production
       SALT: dev-salt-not-for-production
       TELEMETRY_ENABLED: "false"
-      LANGFUSE_INIT_ORG_ID: agent-triage-org
-      LANGFUSE_INIT_PROJECT_ID: agent-triage-project
+      LANGFUSE_INIT_ORG_ID: docket-org
+      LANGFUSE_INIT_PROJECT_ID: docket-project
       LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-dev
       LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-dev
     healthcheck:

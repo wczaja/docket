@@ -1,25 +1,25 @@
 # Configuration reference
 
-Three layers, in precedence order: **CLI flags > `agent-triage.yaml` >
+Three layers, in precedence order: **CLI flags > `docket.yaml` >
 built-in defaults**. Process environment variables are read in exactly
 two places: LLM/embedding provider SDK credentials, and the standalone
-MCP adapter binaries. (The `env:` blocks inside `agent-triage.yaml` are
+MCP adapter binaries. (The `env:` blocks inside `docket.yaml` are
 *config values shaped like env vars* — the runtime reads them from the
 file, not from your shell.)
 
-## `agent-triage.yaml`
+## `docket.yaml`
 
-Validated by `agent_triage.config.Config` (Pydantic); unknown or
+Validated by `docket.config.Config` (Pydantic); unknown or
 malformed fields raise `ConfigError` at startup, before any I/O. The
-default path is `./agent-triage.yaml`; override with `--config`. The
+default path is `./docket.yaml`; override with `--config`. The
 file is optional if `--backend` + its connection flags are given.
 
 ```yaml
 # Required: where traces come from.
 trace_backend:
   type: mcp                              # only "mcp" in v1
-  command: agent-triage-adapter-phoenix  # selects the backend (suffix after
-                                         # "agent-triage-adapter-" or a bare
+  command: docket-adapter-phoenix  # selects the backend (suffix after
+                                         # "docket-adapter-" or a bare
                                          # name: phoenix | langfuse | langsmith)
   env:                                   # backend-specific settings, see tables below
     PHOENIX_URL: http://localhost:6006
@@ -27,14 +27,14 @@ trace_backend:
 # Optional: where issues go. Omit to queue drafts locally with no dedup.
 tracker:
   type: mcp
-  command: agent-triage-adapter-github   # jira | linear | github
+  command: docket-adapter-github   # jira | linear | github
   env:
     GITHUB_TOKEN: ghp_...
     GITHUB_OWNER: my-org
     GITHUB_REPO: agents
 
 # Required: the rubric to classify against (path, file:// URI, or builtin URI).
-rubric: agent-triage.dev/builtin/agents/v1
+rubric: docket.dev/builtin/agents/v1
 
 # Optional knobs (defaults shown):
 max_traces_per_run: 1000          # hard cap on effective workload; > 0
@@ -90,22 +90,22 @@ silent fallback.
 | `ANTHROPIC_API_KEY` | Anthropic SDK | `--provider anthropic` (default) with any `llm_judge` mode, and `self-test` |
 | `OPENAI_API_KEY` | OpenAI SDK | `--provider openai`, **and always for clustering** — embeddings are OpenAI-only in v1, and the pipeline preflights this key before classifying so it fails fast rather than after spend |
 | `EDITOR` | `--review` flow | optional; without it, drafts print to stdout with a y/n prompt |
-| Adapter variables (`PHOENIX_URL`, `GITHUB_TOKEN`, …) | **standalone MCP binaries only** | when running `agent-triage-adapter-*` directly; the `run`/`serve` CLI takes these from flags or the config `env:` blocks instead |
+| Adapter variables (`PHOENIX_URL`, `GITHUB_TOKEN`, …) | **standalone MCP binaries only** | when running `docket-adapter-*` directly; the `run`/`serve` CLI takes these from flags or the config `env:` blocks instead |
 
 ## Built-in defaults worth knowing
 
 | Setting | Default | Where |
 |---|---|---|
-| Judge model (anthropic) | `claude-haiku-4-5-20251001` | `agent_triage.llm.DEFAULT_ANTHROPIC_MODEL` |
-| Judge model (openai) | `gpt-4o-mini` | `agent_triage.llm.DEFAULT_OPENAI_MODEL` |
-| Embedding model | `text-embedding-3-small` | `agent_triage.llm.DEFAULT_OPENAI_EMBEDDING_MODEL` (rubrics can override via `clustering.embedding_model`) |
+| Judge model (anthropic) | `claude-haiku-4-5-20251001` | `docket.llm.DEFAULT_ANTHROPIC_MODEL` |
+| Judge model (openai) | `gpt-4o-mini` | `docket.llm.DEFAULT_OPENAI_MODEL` |
+| Embedding model | `text-embedding-3-small` | `docket.llm.DEFAULT_OPENAI_EMBEDDING_MODEL` (rubrics can override via `clustering.embedding_model`) |
 | Classification concurrency | 8 | `--concurrency` |
 | Classifier retries | 3, exponential backoff | then the trace is marked unprocessed, run continues |
 | Backend write retries | 5 | then the run aborts (no partial-write runs) |
 | Trace cap | 1000 | `max_traces_per_run` / `--max-traces` |
-| Queue directory | `~/.agent-triage/queued-issues/` | `--queue-dir` |
+| Queue directory | `~/.docket/queued-issues/` | `--queue-dir` |
 | Self-instrumentation endpoint | `http://localhost:6006` | `--instrument-to` default target when enabled |
-| Price table for `--dry-run` | baked per-model table | `agent_triage/cost.py` (single-file edit to update) |
+| Price table for `--dry-run` | baked per-model table | `docket/cost.py` (single-file edit to update) |
 
 ## Secrets handling
 

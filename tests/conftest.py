@@ -7,13 +7,13 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _reset_agent_triage_logger_propagation() -> Iterator[None]:
-    """The CLI's _configure_logging sets propagate=False on the agent_triage
+def _reset_docket_logger_propagation() -> Iterator[None]:
+    """The CLI's _configure_logging sets propagate=False on the docket
     logger. That state leaks across tests within a pytest session and breaks
     caplog assertions in unrelated tests. Restore propagation around every
     test.
     """
-    logger = logging.getLogger("agent_triage")
+    logger = logging.getLogger("docket")
     original = logger.propagate
     logger.propagate = True
     yield

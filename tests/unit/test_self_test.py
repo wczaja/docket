@@ -1,14 +1,14 @@
 from typing import Any
 
-from agent_triage.llm.base import ModelProvider
-from agent_triage.rubric.spec import (
+from docket.llm.base import ModelProvider
+from docket.rubric.spec import (
     Detection,
     Example,
     Mode,
     Rubric,
     RubricMetadata,
 )
-from agent_triage.self_test import run_self_test
+from docket.self_test import run_self_test
 
 
 class _StubProvider(ModelProvider):
@@ -29,7 +29,7 @@ class _StubProvider(ModelProvider):
 
 def _rubric_with_examples() -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="self-test-fixture", version="1.0.0"),
         modes=[
@@ -91,7 +91,7 @@ async def test_self_test_exercises_regex_examples() -> None:
 
 async def test_self_test_regex_positive_and_negative_examples() -> None:
     rubric = Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="x", version="1"),
         modes=[
@@ -113,7 +113,7 @@ async def test_self_test_regex_positive_and_negative_examples() -> None:
 
 async def test_self_test_reports_failing_regex_example() -> None:
     rubric = Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="x", version="1"),
         modes=[
@@ -136,7 +136,7 @@ async def test_self_test_reports_failing_regex_example() -> None:
 
 async def test_self_test_skips_tool_call_and_metric_threshold_with_reason() -> None:
     rubric = Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="x", version="1"),
         modes=[
@@ -167,7 +167,7 @@ async def test_self_test_skips_tool_call_and_metric_threshold_with_reason() -> N
 
 async def test_self_test_modes_without_examples_are_ignored() -> None:
     rubric = Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="x", version="1"),
         modes=[

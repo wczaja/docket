@@ -9,14 +9,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from agent_triage.agent.subagents.clusterer import cluster_per_mode
-from agent_triage.agent.subagents.drafter import draft_issues
-from agent_triage.detectors.llm_judge import LLMJudgeDetector
-from agent_triage.llm.base import ModelProvider
-from agent_triage.llm.embeddings import EmbeddingProvider
-from agent_triage.models.classification import Classification
-from agent_triage.models.otlp import from_otlp
-from agent_triage.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
+from docket.agent.subagents.clusterer import cluster_per_mode
+from docket.agent.subagents.drafter import draft_issues
+from docket.detectors.llm_judge import LLMJudgeDetector
+from docket.llm.base import ModelProvider
+from docket.llm.embeddings import EmbeddingProvider
+from docket.models.classification import Classification
+from docket.models.otlp import from_otlp
+from docket.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
 
 
 class _RecordingProvider(ModelProvider):
@@ -114,7 +114,7 @@ async def test_clusterer_to_drafter_path_inherits_redaction(tmp_path: Path) -> N
     """
     mode = Mode(id="leak", severity="medium", detection=Detection(type="regex", pattern="x"))
     rubric = Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="redaction-test", version="0.0.1"),
         modes=[mode],

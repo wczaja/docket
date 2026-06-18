@@ -1,0 +1,174 @@
+apiVersion: docket.dev/v1
+kind: Rubric
+metadata:
+  name: rag-builtin
+  version: 1.0.0
+  description: |
+    Retrieval-Augmented Generation failure modes. Covers the four classic
+    RAG pathologies: answering from parametric knowledge instead of
+    retrieved context, citing sources that don't support the claim,
+    surfacing stale documents past a time-sensitive cutoff, and overflowing
+    the model's context window so middle passages are silently dropped.
+
+    Synthetic baseline. Compose with `agents/v1` for a generic agent that
+    also retrieves:
+
+        imports:
+          - docket.dev/builtin/agents/v1
+          - docket.dev/builtin/rag/v1
+
+modes:
+  - id: off-corpus-answer
+    name: Off-Corpus Answer
+    description: |
+      Agent answered a corpus-grounded question using its parametric
+      knowledge rather than the retrieved context. The answer may be
+      correct, but it bypasses the corpus the user trusted as the source
+      of truth.
+    severity: critical
+    detection:
+      type: llm_judge
+      prompt: |
+        You will receive a user question, the documents that were
+        retrieved, and the agent's final response.
+
+        Determine whether the response answers the question using ONLY
+        information present in the retrieved documents, or whether the
+        agent supplied facts not grounded in the retrieval set.
+
+        Return positive=true if any non-trivial factual content in the
+        response is absent from the retrieved documents.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          ungrounded_excerpt: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "User asked which version introduced feature X. Agent retrieved release notes for v3.4, v3.5, v3.6 — none mention X. Agent answered: 'Feature X was added in v2.1.'"
+        context: "Retrieved release notes do not contain v2.1 or feature X."
+        expected: positive
+      - trace_excerpt: "User asked which version introduced rate limiting. Retrieved v3.5 release notes state: 'Added per-tenant rate limiting (1000 rps default).' Agent answered: 'Rate limiting was added in v3.5.'"
+        context: "Retrieved v3.5 release notes confirm rate limiting addition."
+        expected: negative
+
+  - id: missing-citation
+    name: Missing Citation
+    description: |
+      Agent made a specific factual claim (number, name, date, quote)
+      without surfacing the supporting document from the retrieval set.
+      In a citation-required deployment, this is a contract violation
+      regardless of whether the underlying fact is correct.
+    severity: high
+    detection:
+      type: llm_judge
+      prompt: |
+        Examine the agent's final response. Identify specific factual
+        claims — numbers, percentages, dates, proper nouns, direct
+        quotes. For each claim, check whether the response cites the
+        source document (by title, URL, or section heading).
+
+        Return positive=true if any non-trivial factual claim is
+        uncited.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          uncited_claim: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "Our Q3 revenue grew 23% year-over-year, driven mainly by enterprise expansion."
+        context: "Retrieved the Q3 earnings report. Response includes no citation, no link, no document reference."
+        expected: positive
+      - trace_excerpt: "Per the Q3 earnings report (filed Oct 28), revenue grew 23% YoY [source: q3-2025-earnings.pdf, p.4]."
+        context: "Retrieved the same earnings report; response cites it with file + page."
+        expected: negative
+
+  - id: stale-retrieval
+    name: Stale Retrieval
+    description: |
+      Retrieval returned documents older than the user's freshness
+      requirement, and the agent answered from them anyway without
+      flagging the staleness. Common when the corpus indexes time-sensitive
+      content (pricing pages, policy docs, schedules) but the retriever
+      doesn't filter by date.
+    severity: high
+    detection:
+      type: llm_judge
+      prompt: |
+        Determine whether the user's question is time-sensitive (asks
+        for "current", "latest", "today's", or implies a recency
+        requirement). If so, check whether the retrieved documents are
+        explicitly dated within a reasonable window for the question.
+
+        Return positive=true when:
+          - The question is time-sensitive AND
+          - The retrieved documents are stale (older than 90 days for
+            "current" / "latest" framing) AND
+          - The agent did not acknowledge the staleness.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          staleness_days: {type: [integer, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "User: 'What is our current pricing?' Retrieved: pricing page dated 18 months ago. Agent answered: 'Pro is $42/mo, Enterprise is custom.' (no mention of staleness)"
+        context: "Question is time-sensitive; retrieved doc is 18mo old; agent did not flag age."
+        expected: positive
+      - trace_excerpt: "User: 'What is our current pricing?' Retrieved: pricing page dated 18 months ago. Agent answered: 'The most recent pricing I can find is from 18 months ago: Pro $42/mo, Enterprise custom. This may be out of date; please verify.'"
+        context: "Same retrieval, but agent explicitly flagged the staleness."
+        expected: negative
+
+  - id: context-overflow
+    name: Context Overflow
+    description: |
+      Retrieved documents exceeded the model's context window and the
+      middle passages were silently dropped by the LLM provider's
+      truncation policy ("lost in the middle"). The visible symptom is
+      a response that contradicts a fact present in retrieved-but-truncated
+      passages.
+    severity: medium
+    detection:
+      type: llm_judge
+      prompt: |
+        Compare the response against the retrieved documents. If the
+        response contradicts a document that was retrieved but
+        unusually long (>50% of the model's context window in token
+        count), or if the response acknowledges only the first / last
+        passages and ignores the middle, flag the trace.
+
+        Heuristic: positive when the response cites only the first or
+        last retrieved document and ignores middle documents containing
+        directly relevant content.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          ignored_passage: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "Retrieved 12 documents totaling 95k tokens. Response only references docs #1 and #12 and gives an answer that contradicts a fact stated explicitly in doc #6."
+        context: "95k tokens exceeds a 64k context window; doc #6 contains the directly relevant passage."
+        expected: positive
+      - trace_excerpt: "Retrieved 4 documents totaling 8k tokens. Response synthesizes facts from docs #2 and #3."
+        context: "Well under the context window; all docs reasonably attended to."
+        expected: negative
+
+clustering:
+  strategy: per_mode_embedding
+  embedding_model: text-embedding-3-small
+  similarity_threshold: 0.82
+  min_cluster_size: 3
+
+triage:
+  auto_post_threshold: never
+  default_severity_to_tracker:
+    critical: P1
+    high: P2
+    medium: P3
+    low: P4

@@ -1,12 +1,12 @@
 # CLI reference
 
-Complete reference for the `agent-triage` command and the six
-`agent-triage-adapter-*` MCP server binaries. Flag text here matches
+Complete reference for the `docket` command and the six
+`docket-adapter-*` MCP server binaries. Flag text here matches
 `--help` output; when in doubt, `--help` for your installed version is
 authoritative.
 
 ```
-agent-triage [--version] [-h]
+docket [--version] [-h]
   run        one-shot pipeline over a time window
   serve      the same pipeline on a fixed cadence (daemon)
   validate   schema-validate a rubric (no network, no credentials)
@@ -17,7 +17,7 @@ Conventions used by every command:
 
 - **Durations** are `<int><unit>` with unit `s|m|h|d` — `30m`, `1h`, `7d`.
 - **Rubric sources** are a filesystem path, a `file://` URI, or a builtin
-  URI (`agent-triage.dev/builtin/<name>/v1` where name ∈ `agents`, `rag`,
+  URI (`docket.dev/builtin/<name>/v1` where name ∈ `agents`, `rag`,
   `routing`, `multi-agent`).
 - **Precedence**: CLI flag > config-file value > built-in default.
 - **Logging** goes to stderr (`-v` for DEBUG, `-q` for warnings-only);
@@ -25,15 +25,15 @@ Conventions used by every command:
 
 ---
 
-## `agent-triage run`
+## `docket run`
 
 Runs: list → classify → annotate (opt-in) → cluster → draft → dedup/post
 → report, over the window `[now − --since, now − --until]`. Prints the
 markdown run report to stdout.
 
 ```bash
-agent-triage run --backend phoenix --phoenix-url http://localhost:6006 \
-  --rubric agent-triage.dev/builtin/agents/v1 --since 1h
+docket run --backend phoenix --phoenix-url http://localhost:6006 \
+  --rubric docket.dev/builtin/agents/v1 --since 1h
 ```
 
 ### Window and identity
@@ -49,7 +49,7 @@ agent-triage run --backend phoenix --phoenix-url http://localhost:6006 \
 | Flag | Default | Meaning |
 |---|---|---|
 | `--rubric SOURCE` | config's `rubric:` | Rubric to classify against |
-| `--config FILE` | `agent-triage.yaml` | Config file path; may be absent if backend flags are given |
+| `--config FILE` | `docket.yaml` | Config file path; may be absent if backend flags are given |
 
 ### Backend selection (one required, via flag or config)
 
@@ -87,7 +87,7 @@ agent-triage run --backend phoenix --phoenix-url http://localhost:6006 \
 | `--annotate/--no-annotate` | off | Write classifications back to the backend, keyed `(trace_id, run_id, rubric_version, mode_id)` (upsert) |
 | `--auto-post-threshold {critical|high|medium|low|never}` | `never` | Auto-post new issues at/above this severity; everything else queues |
 | `--review/--no-review` | off | After the run, walk each `needs_create` draft through `$EDITOR` → y/n → post. Without `$EDITOR`, prints draft + prompts |
-| `--queue-dir DIR` | `~/.agent-triage/queued-issues/` | Where drafts and the report land |
+| `--queue-dir DIR` | `~/.docket/queued-issues/` | Where drafts and the report land |
 
 ### Budget, sampling, resumability
 
@@ -113,7 +113,7 @@ agent-triage run --backend phoenix --phoenix-url http://localhost:6006 \
 | Code | Meaning |
 |---|---|
 | 0 | Run completed (or `--dry-run`: real run would proceed) |
-| 1 | Any `AgentTriageError`: config/credential error, rubric validation failure, budget exceeded, backend write failure after retries — or `--dry-run` predicting an abort |
+| 1 | Any `DocketError`: config/credential error, rubric validation failure, budget exceeded, backend write failure after retries — or `--dry-run` predicting an abort |
 | 2 | CLI usage error (bad flag value, malformed duration) |
 
 Per-trace fetch failures and per-trace classifier failures (after 3
@@ -123,7 +123,7 @@ failing the run.
 
 ---
 
-## `agent-triage serve`
+## `docket serve`
 
 Daemon mode: the `run` pipeline on a fixed cadence. Accepts **the same
 backend / tracker / rubric / classification / budget flags as `run`**
@@ -132,7 +132,7 @@ backend / tracker / rubric / classification / budget flags as `run`**
 serve always uses the deterministic pipeline and derived run ids).
 
 ```bash
-agent-triage serve --interval 1h --config agent-triage.yaml --annotate --checkpoint
+docket serve --interval 1h --config docket.yaml --annotate --checkpoint
 ```
 
 | Flag | Default | Meaning |
@@ -150,7 +150,7 @@ exactly as if cron invoked `run`.
 
 ---
 
-## `agent-triage validate <SOURCE>`
+## `docket validate <SOURCE>`
 
 Schema-validates one rubric (Pydantic + JSON Schema; imports are
 resolved and merge rules checked by the loader). No network, no
@@ -158,11 +158,11 @@ credentials. Exit 0 with `OK: <name> v<version>` or exit 1 with the
 field-level errors.
 
 ```bash
-agent-triage validate ./my-rubric.yaml
-agent-triage validate agent-triage.dev/builtin/rag/v1
+docket validate ./my-rubric.yaml
+docket validate docket.dev/builtin/rag/v1
 ```
 
-## `agent-triage self-test <SOURCE>`
+## `docket self-test <SOURCE>`
 
 Runs each mode's `examples:` through its live detector and asserts the
 expected verdict — the rubric's regression suite against judge-prompt
@@ -187,12 +187,12 @@ purely by environment variables — see [mcp-servers.md](mcp-servers.md)
 for the tool contracts):
 
 ```
-agent-triage-adapter-phoenix     PHOENIX_URL (required), PHOENIX_API_KEY, PHOENIX_MAX_LIST_PAGES
-agent-triage-adapter-langfuse    LANGFUSE_HOST (required), LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_MAX_LIST_PAGES
-agent-triage-adapter-langsmith   LANGSMITH_API_KEY (required), LANGSMITH_ENDPOINT, LANGSMITH_PROJECT, LANGSMITH_MAX_LIST_PAGES
-agent-triage-adapter-jira        JIRA_HOST + JIRA_PROJECT (required), JIRA_EMAIL + JIRA_API_TOKEN or JIRA_PAT, JIRA_DEPLOYMENT, JIRA_MAX_LIST_PAGES
-agent-triage-adapter-linear      LINEAR_API_KEY + LINEAR_TEAM_ID (required), LINEAR_ENDPOINT, LINEAR_MAX_LIST_PAGES
-agent-triage-adapter-github      GITHUB_TOKEN + GITHUB_OWNER + GITHUB_REPO (required), GITHUB_API_URL, GITHUB_MAX_LIST_PAGES
+docket-adapter-phoenix     PHOENIX_URL (required), PHOENIX_API_KEY, PHOENIX_MAX_LIST_PAGES
+docket-adapter-langfuse    LANGFUSE_HOST (required), LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_MAX_LIST_PAGES
+docket-adapter-langsmith   LANGSMITH_API_KEY (required), LANGSMITH_ENDPOINT, LANGSMITH_PROJECT, LANGSMITH_MAX_LIST_PAGES
+docket-adapter-jira        JIRA_HOST + JIRA_PROJECT (required), JIRA_EMAIL + JIRA_API_TOKEN or JIRA_PAT, JIRA_DEPLOYMENT, JIRA_MAX_LIST_PAGES
+docket-adapter-linear      LINEAR_API_KEY + LINEAR_TEAM_ID (required), LINEAR_ENDPOINT, LINEAR_MAX_LIST_PAGES
+docket-adapter-github      GITHUB_TOKEN + GITHUB_OWNER + GITHUB_REPO (required), GITHUB_API_URL, GITHUB_MAX_LIST_PAGES
 ```
 
 A missing required variable exits with code 2 and the variable's name on

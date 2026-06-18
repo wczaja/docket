@@ -3,15 +3,15 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from agent_triage.cli import main
-from agent_triage.self_test import SelfTestResult
+from docket.cli import main
+from docket.self_test import SelfTestResult
 
 
 def test_help_works() -> None:
     runner = CliRunner()
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
-    assert "agent-triage" in result.output
+    assert "docket" in result.output
 
 
 def test_version_works() -> None:
@@ -45,14 +45,14 @@ def test_validate_nonexistent_file(tmp_path: Path) -> None:
 
 def test_validate_builtin_uri() -> None:
     runner = CliRunner()
-    result = runner.invoke(main, ["validate", "agent-triage.dev/builtin/agents/v1"])
+    result = runner.invoke(main, ["validate", "docket.dev/builtin/agents/v1"])
     assert result.exit_code == 0, result.output
     assert "OK" in result.output
 
 
 def test_validate_unknown_builtin() -> None:
     runner = CliRunner()
-    result = runner.invoke(main, ["validate", "agent-triage.dev/builtin/nonexistent/v1"])
+    result = runner.invoke(main, ["validate", "docket.dev/builtin/nonexistent/v1"])
     assert result.exit_code == 1
     assert "Unknown builtin" in result.output
 
@@ -79,8 +79,8 @@ def test_self_test_command_passes(fixtures_dir: Path) -> None:
 
     runner = CliRunner()
     with (
-        patch("agent_triage.cli.run_self_test", side_effect=fake_run_self_test),
-        patch("agent_triage.cli.build_provider"),
+        patch("docket.cli.run_self_test", side_effect=fake_run_self_test),
+        patch("docket.cli.build_provider"),
     ):
         result = runner.invoke(
             main,
@@ -105,8 +105,8 @@ def test_self_test_command_reports_failures(fixtures_dir: Path) -> None:
 
     runner = CliRunner()
     with (
-        patch("agent_triage.cli.run_self_test", side_effect=fake_run_self_test),
-        patch("agent_triage.cli.build_provider"),
+        patch("docket.cli.run_self_test", side_effect=fake_run_self_test),
+        patch("docket.cli.build_provider"),
     ):
         result = runner.invoke(
             main,
@@ -131,8 +131,8 @@ def test_self_test_command_skips_non_llm_judge(fixtures_dir: Path) -> None:
 
     runner = CliRunner()
     with (
-        patch("agent_triage.cli.run_self_test", side_effect=fake_run_self_test),
-        patch("agent_triage.cli.build_provider"),
+        patch("docket.cli.run_self_test", side_effect=fake_run_self_test),
+        patch("docket.cli.build_provider"),
     ):
         result = runner.invoke(
             main,
@@ -160,7 +160,7 @@ def test_run_rejects_missing_backend(tmp_path: Path) -> None:
         [
             "run",
             "--rubric",
-            "agent-triage.dev/builtin/agents/v1",
+            "docket.dev/builtin/agents/v1",
             "--config",
             str(tmp_path / "missing.yaml"),
         ],
@@ -178,7 +178,7 @@ def test_run_rejects_missing_phoenix_url(tmp_path: Path) -> None:
             "--backend",
             "phoenix",
             "--rubric",
-            "agent-triage.dev/builtin/agents/v1",
+            "docket.dev/builtin/agents/v1",
             "--config",
             str(tmp_path / "missing.yaml"),
         ],
@@ -191,8 +191,8 @@ def test_run_executes_with_mocked_dependencies(tmp_path: Path) -> None:
     """End-to-end CLI invocation with build_backend and run_triage_pipeline patched."""
     from datetime import UTC, datetime
 
-    from agent_triage.agent.triage import TriageResult
-    from agent_triage.models.report import ModeStats, RunReport
+    from docket.agent.triage import TriageResult
+    from docket.models.report import ModeStats, RunReport
 
     fake_report = RunReport(
         run_id="abc123",
@@ -210,7 +210,7 @@ def test_run_executes_with_mocked_dependencies(tmp_path: Path) -> None:
         clusters=[],
         drafts=[],
         report_markdown=(
-            "# agent-triage run `abc123`\n\n"
+            "# docket run `abc123`\n\n"
             "- **Traces processed**: 0\n"
             "- **Clusters formed**: 0\n"
             "- **Issues drafted**: 0\n\n"
@@ -230,9 +230,9 @@ def test_run_executes_with_mocked_dependencies(tmp_path: Path) -> None:
 
     runner = CliRunner()
     with (
-        patch("agent_triage.cli.build_backend", return_value=_NoopBackend()),
-        patch("agent_triage.cli.run_triage_pipeline", side_effect=fake_run),
-        patch("agent_triage.cli.build_provider"),
+        patch("docket.cli.build_backend", return_value=_NoopBackend()),
+        patch("docket.cli.run_triage_pipeline", side_effect=fake_run),
+        patch("docket.cli.build_provider"),
     ):
         result = runner.invoke(
             main,
@@ -243,7 +243,7 @@ def test_run_executes_with_mocked_dependencies(tmp_path: Path) -> None:
                 "--phoenix-url",
                 "http://test:6006",
                 "--rubric",
-                "agent-triage.dev/builtin/agents/v1",
+                "docket.dev/builtin/agents/v1",
                 "--config",
                 str(tmp_path / "missing.yaml"),
                 "--since",
@@ -251,7 +251,7 @@ def test_run_executes_with_mocked_dependencies(tmp_path: Path) -> None:
             ],
         )
     assert result.exit_code == 0, result.output
-    assert "agent-triage run `abc123`" in result.output
+    assert "docket run `abc123`" in result.output
     assert "hallucination" in result.output
 
 
@@ -259,8 +259,8 @@ def test_run_passes_run_id_override(tmp_path: Path) -> None:
     """--run-id flag forwards to run_triage_pipeline."""
     from datetime import UTC, datetime
 
-    from agent_triage.agent.triage import TriageResult
-    from agent_triage.models.report import RunReport
+    from docket.agent.triage import TriageResult
+    from docket.models.report import RunReport
 
     captured: dict[str, object] = {}
 
@@ -289,9 +289,9 @@ def test_run_passes_run_id_override(tmp_path: Path) -> None:
 
     runner = CliRunner()
     with (
-        patch("agent_triage.cli.build_backend", return_value=_NoopBackend()),
-        patch("agent_triage.cli.run_triage_pipeline", side_effect=fake_run),
-        patch("agent_triage.cli.build_provider"),
+        patch("docket.cli.build_backend", return_value=_NoopBackend()),
+        patch("docket.cli.run_triage_pipeline", side_effect=fake_run),
+        patch("docket.cli.build_provider"),
     ):
         result = runner.invoke(
             main,
@@ -302,7 +302,7 @@ def test_run_passes_run_id_override(tmp_path: Path) -> None:
                 "--phoenix-url",
                 "http://test:6006",
                 "--rubric",
-                "agent-triage.dev/builtin/agents/v1",
+                "docket.dev/builtin/agents/v1",
                 "--config",
                 str(tmp_path / "missing.yaml"),
                 "--since",
@@ -326,7 +326,7 @@ def test_run_rejects_bad_duration(tmp_path: Path) -> None:
             "--phoenix-url",
             "http://test",
             "--rubric",
-            "agent-triage.dev/builtin/agents/v1",
+            "docket.dev/builtin/agents/v1",
             "--since",
             "not-a-duration",
             "--config",

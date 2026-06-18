@@ -17,15 +17,15 @@ test file is fully deterministic and runs on every PR.
 
 import pytest
 
-from agent_triage.rubric.loader import load_rubric
-from agent_triage.rubric.spec import Rubric
-from agent_triage.rubric.validator import validate_rubric_yaml
+from docket.rubric.loader import load_rubric
+from docket.rubric.spec import Rubric
+from docket.rubric.validator import validate_rubric_yaml
 
 _BUILTIN_URIS = [
-    "agent-triage.dev/builtin/agents/v1",
-    "agent-triage.dev/builtin/rag/v1",
-    "agent-triage.dev/builtin/routing/v1",
-    "agent-triage.dev/builtin/multi-agent/v1",
+    "docket.dev/builtin/agents/v1",
+    "docket.dev/builtin/rag/v1",
+    "docket.dev/builtin/routing/v1",
+    "docket.dev/builtin/multi-agent/v1",
 ]
 
 _VALID_SEVERITIES = {"critical", "high", "medium", "low"}

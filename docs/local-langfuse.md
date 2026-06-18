@@ -16,7 +16,7 @@ This brings up:
 - `langfuse-db` (Postgres 16, port-isolated to the compose network)
 - `langfuse` (the v2 server, exposed at <http://localhost:3000>)
 
-The compose definition pre-creates an `agent-triage` project with the keys:
+The compose definition pre-creates an `docket` project with the keys:
 
 | Key           | Value          |
 | ------------- | -------------- |
@@ -44,17 +44,17 @@ specific). For now, you can:
 ## 3. Run triage against Langfuse
 
 ```bash
-agent-triage run \
+docket run \
   --backend langfuse \
   --langfuse-host http://localhost:3000 \
   --langfuse-public-key pk-lf-dev \
   --langfuse-secret-key sk-lf-dev \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 ```
 
 Read-only by default. Add `--annotate` to write Langfuse scores back to the
-trace; the score's `name` is `agent-triage:<mode_id>` and its `metadata`
+trace; the score's `name` is `docket:<mode_id>` and its `metadata`
 carries the run provenance (run_id + rubric_version + idempotency_key).
 
 ## 4. Stop Langfuse

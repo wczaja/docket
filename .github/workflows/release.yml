@@ -6,9 +6,9 @@ name: Release
 # secrets. One-time setup on PyPI:
 #
 #   1. Visit https://pypi.org/manage/account/publishing/
-#   2. Add a "pending" publisher for the project name "agent-triage" with:
+#   2. Add a "pending" publisher for the project name "docket" with:
 #        Owner: wczaja
-#        Repository: agent-triage
+#        Repository: docket
 #        Workflow: release.yml
 #        Environment: release
 #   3. (Optional) Pre-create the project on PyPI by uploading a 0.1.0
@@ -71,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: release
-      url: https://pypi.org/p/agent-triage
+      url: https://pypi.org/p/docket
     # Required for PyPI OIDC.
     permissions:
       id-token: write

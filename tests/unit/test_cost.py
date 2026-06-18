@@ -1,15 +1,15 @@
-"""Unit tests for `agent_triage.cost`."""
+"""Unit tests for `docket.cost`."""
 
 import pytest
 
-from agent_triage.cost import (
+from docket.cost import (
     DEFAULT_INPUT_TOKENS_PER_CALL,
     DEFAULT_OUTPUT_TOKENS_PER_CALL,
     estimate_cost,
     known_models,
     llm_judge_modes,
 )
-from agent_triage.rubric.spec import Detection, Mode, Rubric, RubricMetadata
+from docket.rubric.spec import Detection, Mode, Rubric, RubricMetadata
 
 _JUDGE_SCHEMA = {"type": "object", "properties": {"positive": {"type": "boolean"}}}
 
@@ -57,7 +57,7 @@ def _composite_judge_mode(mode_id: str, *, model: str | None = None) -> Mode:
 
 def _rubric(modes: list[Mode]) -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="testbench", version="0.1.0"),
         modes=modes,

@@ -7,14 +7,14 @@ from typing import Any
 import httpx
 import pytest
 
-from agent_triage.adapters.tracker.jira import (
+from docket.adapters.tracker.jira import (
     JiraAdapter,
     _adf_to_text,
     _detect_deployment,
     _markdown_to_adf,
 )
-from agent_triage.errors import TrackerError
-from agent_triage.models.issue import IssueDraft, IssuePatch
+from docket.errors import TrackerError
+from docket.models.issue import IssueDraft, IssuePatch
 
 
 def _make_cloud_adapter(
@@ -59,7 +59,7 @@ def _draft(**overrides: Any) -> IssueDraft:
         "member_trace_ids": ["t-1", "t-2", "t-3"],
         "title": "Agent hallucinates capital cities",
         "body": "Body of the issue.\n\nA second paragraph.",
-        "labels": ["agent-triage", "mode:hallucination", "rubric:agents@1.0.0"],
+        "labels": ["docket", "mode:hallucination", "rubric:agents@1.0.0"],
     }
     base.update(overrides)
     return IssueDraft(**base)
@@ -185,7 +185,7 @@ async def test_list_open_issues_filters_by_labels_via_jql_on_cloud() -> None:
                                     }
                                 ],
                             },
-                            "labels": ["agent-triage", "mode:hallucination"],
+                            "labels": ["docket", "mode:hallucination"],
                             "status": {"name": "Open"},
                         },
                     }
@@ -196,13 +196,13 @@ async def test_list_open_issues_filters_by_labels_via_jql_on_cloud() -> None:
 
     adapter = _make_cloud_adapter(handler)
     issues = await adapter.list_open_issues(
-        filter={"labels": ["agent-triage", "mode:hallucination"]},
+        filter={"labels": ["docket", "mode:hallucination"]},
     )
     assert captured["path"] == "/rest/api/3/search/jql"
     jql = captured["params"]["jql"]
     assert 'project = "AGT"' in jql
     assert "resolution = Unresolved" in jql
-    assert 'labels = "agent-triage"' in jql
+    assert 'labels = "docket"' in jql
     assert 'labels = "mode:hallucination"' in jql
     assert len(issues) == 1
     assert issues[0].id == "10001"
@@ -220,7 +220,7 @@ async def test_list_open_issues_uses_v2_path_for_datacenter() -> None:
         return httpx.Response(200, json={"issues": [], "total": 0})
 
     adapter = _make_dc_adapter(handler)
-    await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+    await adapter.list_open_issues(filter={"labels": ["docket"]})
     assert captured["path"] == "/rest/api/2/search"
 
 
@@ -252,7 +252,7 @@ async def test_list_open_issues_paginates_with_next_page_token_on_cloud() -> Non
         )
 
     adapter = _make_cloud_adapter(handler)
-    issues = await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+    issues = await adapter.list_open_issues(filter={"labels": ["docket"]})
     assert len(issues) == 60
     assert page_count == 2
     assert tokens_seen == [None, "tok-2"]
@@ -284,7 +284,7 @@ async def test_list_open_issues_paginates_with_start_at_on_datacenter() -> None:
         )
 
     adapter = _make_dc_adapter(handler)
-    issues = await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+    issues = await adapter.list_open_issues(filter={"labels": ["docket"]})
     assert len(issues) == 60
     assert page_count == 2
 
@@ -303,8 +303,8 @@ async def test_cloud_search_page_cap_logs_warning(caplog: pytest.LogCaptureFixtu
         )
 
     adapter = _make_cloud_adapter(handler)
-    with caplog.at_level("WARNING", logger="agent_triage.adapters.tracker.jira"):
-        issues = await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+    with caplog.at_level("WARNING", logger="docket.adapters.tracker.jira"):
+        issues = await adapter.list_open_issues(filter={"labels": ["docket"]})
     assert len(issues) == 20  # one issue per page, capped at _MAX_PAGES
     assert any("dedup may miss matches" in r.message for r in caplog.records)
 
@@ -315,7 +315,7 @@ async def test_list_open_issues_raises_on_http_error() -> None:
 
     adapter = _make_cloud_adapter(handler)
     with pytest.raises(TrackerError, match="failed with 403"):
-        await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+        await adapter.list_open_issues(filter={"labels": ["docket"]})
 
 
 async def test_search_returns_non_dict_raises() -> None:
@@ -324,7 +324,7 @@ async def test_search_returns_non_dict_raises() -> None:
 
     adapter = _make_cloud_adapter(handler)
     with pytest.raises(TrackerError, match="non-object"):
-        await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+        await adapter.list_open_issues(filter={"labels": ["docket"]})
 
 
 async def test_search_returns_non_list_issues_raises() -> None:
@@ -333,7 +333,7 @@ async def test_search_returns_non_list_issues_raises() -> None:
 
     adapter = _make_cloud_adapter(handler)
     with pytest.raises(TrackerError, match="non-list `issues`"):
-        await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+        await adapter.list_open_issues(filter={"labels": ["docket"]})
 
 
 async def test_search_returns_non_json_raises() -> None:
@@ -346,7 +346,7 @@ async def test_search_returns_non_json_raises() -> None:
 
     adapter = _make_cloud_adapter(handler)
     with pytest.raises(TrackerError, match="non-JSON"):
-        await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+        await adapter.list_open_issues(filter={"labels": ["docket"]})
 
 
 # -- search_issues ----------------------------------------------------------
@@ -483,7 +483,7 @@ async def test_update_issue_patches_only_provided_fields() -> None:
                             }
                         ],
                     },
-                    "labels": ["agent-triage"],
+                    "labels": ["docket"],
                     "status": {"name": "Open"},
                 },
             },
@@ -573,7 +573,7 @@ async def test_list_open_issues_retries_429_then_succeeds() -> None:
         return httpx.Response(200, json={"issues": [], "total": 0})
 
     adapter = _make_cloud_adapter(handler)
-    issues = await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+    issues = await adapter.list_open_issues(filter={"labels": ["docket"]})
     assert issues == []
     assert calls == 2
 

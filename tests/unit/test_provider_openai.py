@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from agent_triage.errors import CredentialError, DetectionError
-from agent_triage.llm._openai import OpenAIProvider
+from docket.errors import CredentialError, DetectionError
+from docket.llm._openai import OpenAIProvider
 
 
 def _mock_client_returning(content: str | None, refusal: str | None = None) -> Any:

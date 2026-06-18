@@ -1,9 +1,9 @@
 import pytest
 
-from agent_triage.detectors.tool_call import ToolCallDetector
-from agent_triage.errors import DetectionError
-from agent_triage.models.trace import ToolCall, TraceLike
-from agent_triage.rubric.spec import Detection, Mode
+from docket.detectors.tool_call import ToolCallDetector
+from docket.errors import DetectionError
+from docket.models.trace import ToolCall, TraceLike
+from docket.rubric.spec import Detection, Mode
 
 
 def _mode(tool_calls: list[str] | None = None) -> Mode:

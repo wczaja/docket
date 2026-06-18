@@ -4,15 +4,15 @@ from pathlib import Path
 
 import pytest
 
-from agent_triage.adapters.base import Tracker
-from agent_triage.agent.review import (
+from docket.adapters.base import Tracker
+from docket.agent.review import (
     ReviewOutcome,
     _apply_markdown_edits,
     review_and_post,
 )
-from agent_triage.agent.subagents.poster import DedupOutcome
-from agent_triage.errors import TrackerError
-from agent_triage.models.issue import Issue, IssueDraft, IssueProvenance, make_labels
+from docket.agent.subagents.poster import DedupOutcome
+from docket.errors import TrackerError
+from docket.models.issue import Issue, IssueDraft, IssueProvenance, make_labels
 
 
 class _RecordingTracker(Tracker):
@@ -265,7 +265,7 @@ def test_apply_markdown_edits_recovers_title_and_body() -> None:
     assert "Updated body" in new.body
     # Provenance is preserved (it lives in body, but to_markdown drops it from
     # the Description section; re-attached below the body re-parse).
-    assert "agent-triage:provenance" in new.body
+    assert "docket:provenance" in new.body
 
 
 def test_apply_markdown_edits_preserves_provenance_when_operator_strips_it() -> None:
@@ -275,7 +275,7 @@ def test_apply_markdown_edits_preserves_provenance_when_operator_strips_it() -> 
     assert new.title == "Some new title"
     assert "shorter body" in new.body
     # Provenance is re-attached from the original draft.
-    assert "agent-triage:provenance" in new.body
+    assert "docket:provenance" in new.body
     parsed = IssueProvenance.parse_from_body(new.body)
     assert parsed is not None
     assert parsed.cluster_id == draft.cluster_id
@@ -297,8 +297,8 @@ def test_review_outcome_is_immutable() -> None:
 
 
 def test_summarize_review_outcomes_renders_actions() -> None:
-    from agent_triage.agent.review import ReviewOutcome, summarize_review_outcomes
-    from agent_triage.models.issue import Issue
+    from docket.agent.review import ReviewOutcome, summarize_review_outcomes
+    from docket.models.issue import Issue
 
     draft = _make_draft()
     outcomes = [
@@ -317,6 +317,6 @@ def test_summarize_review_outcomes_renders_actions() -> None:
 
 
 def test_summarize_review_outcomes_empty_is_empty() -> None:
-    from agent_triage.agent.review import summarize_review_outcomes
+    from docket.agent.review import summarize_review_outcomes
 
     assert summarize_review_outcomes([]) == ""

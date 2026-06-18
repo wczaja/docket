@@ -5,15 +5,15 @@
 # the product, the prices, the specialists, and the traces. Copy it as a
 # starting point for your own domain rubric, then validate with:
 #
-#   agent-triage validate rubrics/examples/sample-support-agent.yaml
+#   docket validate rubrics/examples/sample-support-agent.yaml
 #
 # and smoke-test the examples against a live judge model with:
 #
-#   agent-triage self-test rubrics/examples/sample-support-agent.yaml
-apiVersion: agent-triage.dev/v1
+#   docket self-test rubrics/examples/sample-support-agent.yaml
+apiVersion: docket.dev/v1
 kind: Rubric
 metadata:
-  name: sample-support-agent-triage
+  name: sample-support-docket
   version: 0.1.0
   authors:
     - maintainer@example.com
@@ -24,7 +24,7 @@ metadata:
 # Imports merge first; modes declared below are appended after them
 # (and would override an imported mode with the same id).
 imports:
-  - agent-triage.dev/builtin/agents/v1
+  - docket.dev/builtin/agents/v1
 
 modes:
   - id: hallucinated-pricing

@@ -2,12 +2,12 @@ from typing import Any
 
 import pytest
 
-from agent_triage.detectors import get_detector
-from agent_triage.detectors.composite import CompositeDetector
-from agent_triage.errors import DetectionError
-from agent_triage.llm.base import ModelProvider
-from agent_triage.models.trace import TraceLike
-from agent_triage.rubric.spec import Detection, Mode
+from docket.detectors import get_detector
+from docket.detectors.composite import CompositeDetector
+from docket.errors import DetectionError
+from docket.llm.base import ModelProvider
+from docket.models.trace import TraceLike
+from docket.rubric.spec import Detection, Mode
 
 
 class _CountingProvider(ModelProvider):

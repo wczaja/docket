@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_triage.errors import RubricValidationError
-from agent_triage.rubric.validator import validate_rubric_yaml
+from docket.errors import RubricValidationError
+from docket.rubric.validator import validate_rubric_yaml
 
 
 def test_validate_valid_minimal(fixtures_dir: Path) -> None:
@@ -22,10 +22,7 @@ def test_validate_rejects_bad_severity(fixtures_dir: Path) -> None:
 def test_validate_rejects_unknown_apiversion(tmp_path: Path) -> None:
     bad = tmp_path / "future.yaml"
     bad.write_text(
-        "apiVersion: agent-triage.dev/v99\n"
-        "kind: Rubric\n"
-        "metadata: {name: x, version: '1'}\n"
-        "modes: []\n"
+        "apiVersion: docket.dev/v99\nkind: Rubric\nmetadata: {name: x, version: '1'}\nmodes: []\n"
     )
     with pytest.raises(RubricValidationError, match="apiVersion"):
         validate_rubric_yaml(bad)
@@ -34,7 +31,7 @@ def test_validate_rejects_unknown_apiversion(tmp_path: Path) -> None:
 def test_validate_rejects_llm_judge_without_positive(tmp_path: Path) -> None:
     bad = tmp_path / "no_positive.yaml"
     bad.write_text(
-        "apiVersion: agent-triage.dev/v1\n"
+        "apiVersion: docket.dev/v1\n"
         "kind: Rubric\n"
         "metadata: {name: x, version: '1'}\n"
         "modes:\n"
@@ -56,7 +53,7 @@ def test_validate_rejects_llm_judge_without_positive(tmp_path: Path) -> None:
 def test_validate_rejects_regex_without_pattern(tmp_path: Path) -> None:
     bad = tmp_path / "no_pattern.yaml"
     bad.write_text(
-        "apiVersion: agent-triage.dev/v1\n"
+        "apiVersion: docket.dev/v1\n"
         "kind: Rubric\n"
         "metadata: {name: x, version: '1'}\n"
         "modes:\n"
@@ -72,7 +69,7 @@ def test_validate_rejects_regex_without_pattern(tmp_path: Path) -> None:
 def test_validate_rejects_composite_without_operator(tmp_path: Path) -> None:
     bad = tmp_path / "no_op.yaml"
     bad.write_text(
-        "apiVersion: agent-triage.dev/v1\n"
+        "apiVersion: docket.dev/v1\n"
         "kind: Rubric\n"
         "metadata: {name: x, version: '1'}\n"
         "modes:\n"
@@ -91,7 +88,7 @@ def test_validate_rejects_composite_without_operator(tmp_path: Path) -> None:
 def test_validate_rejects_composite_with_comparison_operator(tmp_path: Path) -> None:
     bad = tmp_path / "wrong_op.yaml"
     bad.write_text(
-        "apiVersion: agent-triage.dev/v1\n"
+        "apiVersion: docket.dev/v1\n"
         "kind: Rubric\n"
         "metadata: {name: x, version: '1'}\n"
         "modes:\n"
@@ -111,7 +108,7 @@ def test_validate_rejects_composite_with_comparison_operator(tmp_path: Path) -> 
 def test_validate_rejects_metric_threshold_with_logical_operator(tmp_path: Path) -> None:
     bad = tmp_path / "wrong_op.yaml"
     bad.write_text(
-        "apiVersion: agent-triage.dev/v1\n"
+        "apiVersion: docket.dev/v1\n"
         "kind: Rubric\n"
         "metadata: {name: x, version: '1'}\n"
         "modes:\n"
@@ -128,7 +125,7 @@ def test_validate_rejects_metric_threshold_with_logical_operator(tmp_path: Path)
 
 
 def test_validate_accepts_builtin_uri() -> None:
-    validate_rubric_yaml("agent-triage.dev/builtin/agents/v1")
+    validate_rubric_yaml("docket.dev/builtin/agents/v1")
 
 
 def test_validate_accepts_file_uri(fixtures_dir: Path) -> None:

@@ -16,7 +16,7 @@ adapter must:
     shape across adapters.
   - Idempotently dedup: posting twice with the same draft against the
     same fake server returns two distinct `Issue.id`s, but the dedup
-    loop in `agent_triage.agent.subagents.poster.dedup_drafts` would
+    loop in `docket.agent.subagents.poster.dedup_drafts` would
     detect the second as a match by `cluster_id` from the embedded
     provenance.
 
@@ -35,13 +35,13 @@ from typing import Any
 import httpx
 import pytest
 
-from agent_triage.adapters.base import Tracker
-from agent_triage.adapters.tracker.github import GitHubAdapter
-from agent_triage.adapters.tracker.jira import JiraAdapter
-from agent_triage.adapters.tracker.linear import LinearAdapter
-from agent_triage.agent.subagents.poster import dedup_drafts
-from agent_triage.models.cluster import compute_cluster_id
-from agent_triage.models.issue import IssueDraft, IssueProvenance, make_labels
+from docket.adapters.base import Tracker
+from docket.adapters.tracker.github import GitHubAdapter
+from docket.adapters.tracker.jira import JiraAdapter
+from docket.adapters.tracker.linear import LinearAdapter
+from docket.agent.subagents.poster import dedup_drafts
+from docket.models.cluster import compute_cluster_id
+from docket.models.issue import IssueDraft, IssueProvenance, make_labels
 
 # -- shared draft ------------------------------------------------------------
 

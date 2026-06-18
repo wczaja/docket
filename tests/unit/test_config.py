@@ -2,29 +2,29 @@ from pathlib import Path
 
 import pytest
 
-from agent_triage.config import Config
-from agent_triage.errors import ConfigError
+from docket.config import Config
+from docket.errors import ConfigError
 
 
 def test_config_loads_minimal(tmp_path: Path) -> None:
-    cfg_path = tmp_path / "agent-triage.yaml"
+    cfg_path = tmp_path / "docket.yaml"
     cfg_path.write_text(
         "trace_backend:\n"
         "  type: mcp\n"
-        "  command: agent-triage-adapter-phoenix\n"
+        "  command: docket-adapter-phoenix\n"
         "  env:\n"
         "    PHOENIX_URL: http://localhost:6006\n"
-        "rubric: agent-triage.dev/builtin/agents/v1\n"
+        "rubric: docket.dev/builtin/agents/v1\n"
     )
     cfg = Config.from_yaml(cfg_path)
-    assert cfg.trace_backend.command == "agent-triage-adapter-phoenix"
+    assert cfg.trace_backend.command == "docket-adapter-phoenix"
     assert cfg.trace_backend.env["PHOENIX_URL"] == "http://localhost:6006"
     assert cfg.max_traces_per_run == 1000
     assert cfg.auto_post_threshold == "never"
 
 
 def test_config_loads_full(tmp_path: Path) -> None:
-    cfg_path = tmp_path / "agent-triage.yaml"
+    cfg_path = tmp_path / "docket.yaml"
     cfg_path.write_text(
         "trace_backend:\n"
         "  type: mcp\n"
@@ -49,7 +49,7 @@ def test_config_missing_file(tmp_path: Path) -> None:
 
 
 def test_config_invalid_threshold(tmp_path: Path) -> None:
-    cfg_path = tmp_path / "agent-triage.yaml"
+    cfg_path = tmp_path / "docket.yaml"
     cfg_path.write_text(
         "trace_backend: {type: mcp, command: foo}\nrubric: x\nauto_post_threshold: blocker\n"
     )
@@ -58,7 +58,7 @@ def test_config_invalid_threshold(tmp_path: Path) -> None:
 
 
 def test_config_negative_traces(tmp_path: Path) -> None:
-    cfg_path = tmp_path / "agent-triage.yaml"
+    cfg_path = tmp_path / "docket.yaml"
     cfg_path.write_text(
         "trace_backend: {type: mcp, command: foo}\nrubric: x\nmax_traces_per_run: -1\n"
     )
@@ -67,7 +67,7 @@ def test_config_negative_traces(tmp_path: Path) -> None:
 
 
 def test_config_not_a_mapping(tmp_path: Path) -> None:
-    cfg_path = tmp_path / "agent-triage.yaml"
+    cfg_path = tmp_path / "docket.yaml"
     cfg_path.write_text("- one\n- two\n")
     with pytest.raises(ConfigError, match="mapping"):
         Config.from_yaml(cfg_path)
@@ -75,7 +75,7 @@ def test_config_not_a_mapping(tmp_path: Path) -> None:
 
 def test_config_expands_env_references(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AT_TEST_TOKEN", "tok-123")
-    cfg_path = tmp_path / "agent-triage.yaml"
+    cfg_path = tmp_path / "docket.yaml"
     cfg_path.write_text(
         "trace_backend:\n"
         "  type: mcp\n"
@@ -96,7 +96,7 @@ def test_config_expands_env_references(tmp_path: Path, monkeypatch: pytest.Monke
 
 def test_config_expands_env_inline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AT_TEST_HOST", "phoenix.internal")
-    cfg_path = tmp_path / "agent-triage.yaml"
+    cfg_path = tmp_path / "docket.yaml"
     cfg_path.write_text(
         "trace_backend:\n"
         "  type: mcp\n"
@@ -111,7 +111,7 @@ def test_config_expands_env_inline(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 def test_config_unset_env_reference_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AT_TEST_MISSING", raising=False)
-    cfg_path = tmp_path / "agent-triage.yaml"
+    cfg_path = tmp_path / "docket.yaml"
     cfg_path.write_text(
         "trace_backend:\n"
         "  type: mcp\n"

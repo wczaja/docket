@@ -9,7 +9,7 @@ Gated three ways:
 The test creates a Linear issue against the configured team, posts a dedup
 comment that ought to be a no-op on a second run, then exercises the
 "new member added" comment path. It leaves the test issue in place
-(labeled `agent-triage-test`) so the maintainer can clean it up manually
+(labeled `docket-test`) so the maintainer can clean it up manually
 — Linear workflows are workspace-specific, so the adapter doesn't attempt
 to close issues automatically.
 """
@@ -19,9 +19,9 @@ import uuid
 
 import pytest
 
-from agent_triage.adapters.tracker.linear import LinearAdapter
-from agent_triage.agent.subagents.poster import dedup_drafts
-from agent_triage.models.issue import IssueDraft, make_labels
+from docket.adapters.tracker.linear import LinearAdapter
+from docket.agent.subagents.poster import dedup_drafts
+from docket.models.issue import IssueDraft, make_labels
 
 pytestmark = pytest.mark.integration
 
@@ -37,7 +37,7 @@ def linear_adapter() -> LinearAdapter:
 
 def _draft_for_test(*, cluster_id: str, members: list[str]) -> IssueDraft:
     mode_id = f"e2e-mode-{cluster_id}"
-    rubric_version = "agent-triage-e2e@0.0.0"
+    rubric_version = "docket-e2e@0.0.0"
     return IssueDraft(
         cluster_id=cluster_id,
         mode_id=mode_id,
@@ -46,10 +46,10 @@ def _draft_for_test(*, cluster_id: str, members: list[str]) -> IssueDraft:
         severity="medium",
         representative_trace_id=members[0],
         member_trace_ids=members,
-        title=f"agent-triage e2e test ({cluster_id})",
-        body="This is an automated test issue created by agent-triage's gated "
+        title=f"docket e2e test ({cluster_id})",
+        body="This is an automated test issue created by docket's gated "
         "E2E test. It is safe to delete.",
-        labels=[*make_labels(mode_id, rubric_version), "agent-triage-test"],
+        labels=[*make_labels(mode_id, rubric_version), "docket-test"],
     )
 
 

@@ -1,4 +1,4 @@
-# Using LangSmith with agent-triage
+# Using LangSmith with docket
 
 Phase 7 adds LangSmith as a third `TraceBackend`. Unlike Phoenix and Langfuse,
 LangSmith is **SaaS-only** in v1.0 — there's no self-hosted Docker image to
@@ -10,25 +10,25 @@ plus the cross-adapter parity check.
 Sign in at <https://smith.langchain.com> and create an API key under
 Settings → API Keys. The key starts with `lsv2_` (or `ls__` for older keys).
 
-## 2. Configure agent-triage
+## 2. Configure docket
 
 You can pass the key + endpoint via CLI flags:
 
 ```bash
-agent-triage run \
+docket run \
   --backend langsmith \
   --langsmith-api-key "$LANGSMITH_API_KEY" \
   --langsmith-project my-agent-project \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 ```
 
-Or via `agent-triage.yaml`:
+Or via `docket.yaml`:
 
 ```yaml
 trace_backend:
   type: mcp
-  command: agent-triage-adapter-langsmith
+  command: docket-adapter-langsmith
   env:
     LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
     LANGSMITH_PROJECT: my-agent-project
@@ -44,14 +44,14 @@ trace_backend:
 
 ## 3. What lands where
 
-- **Read** — `agent-triage run --backend langsmith` queries
+- **Read** — `docket run --backend langsmith` queries
   `/api/v1/runs/query` for root runs in the time window, then fetches each
   one with its `child_runs` via `/api/v1/runs/{id}`. The adapter walks the
   run tree and produces an `OpenInferenceTrace` with spans keyed off
   `run_type` (`llm` → LLM, `tool` → TOOL, `retriever` → RETRIEVER,
   `embedding` → EMBEDDING, `chain`/`parser` → CHAIN, `agent` → AGENT).
 - **Write** — `--annotate` posts feedback objects to `/api/v1/feedback` with
-  `key=agent-triage:<mode_id>`, `value=positive|negative`, `score=confidence`,
+  `key=docket:<mode_id>`, `value=positive|negative`, `score=confidence`,
   and `extra` carrying `run_id` + `rubric_version` + `idempotency_key`.
   Re-running with the same `(run_id, rubric_version, mode_id)` upserts on
   the LangSmith side via the idempotency key.
@@ -72,5 +72,5 @@ instance), Phase 7 deliberately doesn't ship a `tests/integration/
 test_langsmith_e2e.py`. LangSmith is SaaS-only, so any such test would run
 against the maintainer's personal LangSmith project — that's not a useful CI
 gate. Unit tests + parity is enough for v1.0. If you want to validate against
-a real LangSmith locally, run `agent-triage run --backend langsmith` against
+a real LangSmith locally, run `docket run --backend langsmith` against
 a project you've populated with your own agent's instrumentation.

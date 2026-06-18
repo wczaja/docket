@@ -1,6 +1,6 @@
 # Adapters
 
-Adapters are how agent-triage stays platform-agnostic: every trace
+Adapters are how docket stays platform-agnostic: every trace
 backend and issue tracker is integrated behind the same two contracts,
 and the runtime core never sees a backend-specific shape. This page
 documents the contracts and how to write a new adapter.
@@ -10,21 +10,21 @@ documents the contracts and how to write a new adapter.
 Every integration is two layers (design §5.3):
 
 1. **Adapter class** — pure-Python, async, no MCP dependency — under
-   `agent_triage/adapters/trace/` or `agent_triage/adapters/tracker/`.
+   `docket/adapters/trace/` or `docket/adapters/tracker/`.
    Owns the backend-specific logic: HTTP calls (`httpx.AsyncClient`),
    normalization to OpenInference, pagination, retry-with-backoff,
-   error mapping to `agent_triage.errors` types. Unit-testable
+   error mapping to `docket.errors` types. Unit-testable
    in-process with a mocked transport.
 2. **MCP server** — a thin entry point under
-   `agent_triage/mcp_servers/` that instantiates the adapter class and
+   `docket/mcp_servers/` that instantiates the adapter class and
    exposes its methods as MCP tools (stdio), wired to a console script
-   (`agent-triage-adapter-<name>`). This is the architectural seam: any
+   (`docket-adapter-<name>`). This is the architectural seam: any
    MCP-aware client can reuse the adapter, and new backends can be added
    without touching the agent.
 
 The `run`/`serve` CLI drives adapter classes in-process for the common
 case; the MCP servers exist for config-driven composition
-(`agent-triage.yaml`'s `type: mcp` blocks) and for external consumers.
+(`docket.yaml`'s `type: mcp` blocks) and for external consumers.
 
 ## Trace backend contract
 
@@ -81,7 +81,7 @@ class Tracker(ABC):
 Obligations:
 
 - **Provenance round-trip.** `create_issue` must persist the draft's
-  labels (`agent-triage`, `mode:<id>`, `rubric:<name>@<version>`) and
+  labels (`docket`, `mode:<id>`, `rubric:<name>@<version>`) and
   body (which ends with the HTML-comment provenance block) faithfully —
   dedup on the next run depends on reading both back.
 - **Loud truncation, dedup safety.** Same `truncated` contract as
@@ -110,7 +110,7 @@ merged:
 3. Pagination loop with a configurable page ceiling
    (`<NAME>_MAX_LIST_PAGES`) and the `truncated` flag; retry helper with
    backoff for 429/5xx.
-4. The MCP server wrapper in `agent_triage/mcp_servers/adapter_<name>.py`
+4. The MCP server wrapper in `docket/mcp_servers/adapter_<name>.py`
    (copy an existing one — they're ~30 lines over the shared `_common`
    helpers) and a `[project.scripts]` entry.
 5. Tests at parity with existing adapters: unit tests with mocked

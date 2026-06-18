@@ -1,14 +1,14 @@
 """Acceptance tests for the agents/v1 built-in rubric.
 
 These verify Phase 1 §7 acceptance criterion #1 ("all five built-in detection
-types parse and validate") and #2 (`agent-triage validate <agents/v1>` exits 0).
+types parse and validate") and #2 (`docket validate <agents/v1>` exits 0).
 """
 
-from agent_triage.rubric.loader import load_rubric
-from agent_triage.rubric.spec import DetectionType
-from agent_triage.rubric.validator import validate_rubric_yaml
+from docket.rubric.loader import load_rubric
+from docket.rubric.spec import DetectionType
+from docket.rubric.validator import validate_rubric_yaml
 
-AGENTS_V1 = "agent-triage.dev/builtin/agents/v1"
+AGENTS_V1 = "docket.dev/builtin/agents/v1"
 
 
 def test_agents_v1_passes_json_schema() -> None:

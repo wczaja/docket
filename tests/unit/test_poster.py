@@ -4,14 +4,14 @@ from typing import Any
 
 import pytest
 
-from agent_triage.adapters.base import Tracker
-from agent_triage.agent.subagents.poster import (
+from docket.adapters.base import Tracker
+from docket.agent.subagents.poster import (
     DedupOutcome,
     dedup_drafts,
     meets_auto_post_threshold,
 )
-from agent_triage.errors import TrackerError
-from agent_triage.models.issue import (
+from docket.errors import TrackerError
+from docket.models.issue import (
     Issue,
     IssueDraft,
     IssuePatch,
@@ -127,7 +127,7 @@ async def test_dedup_queries_with_correct_labels() -> None:
     await dedup_drafts([_draft()], tracker=tracker)
     assert tracker.list_calls[0] == {
         "labels": [
-            "agent-triage",
+            "docket",
             "mode:hallucination",
             "rubric:agents@1.0.0",
         ]
@@ -211,7 +211,7 @@ async def test_dedup_comments_when_grown_cluster_gets_new_hash_id() -> None:
 async def test_dedup_overlap_fallback_requires_mode_and_rubric_labels() -> None:
     """An overlapping issue missing the rubric label is not lineage-matched."""
     existing = _existing_issue(cluster_id="old-id", members=["t-1", "t-2"])
-    unlabeled = existing.model_copy(update={"labels": ["agent-triage", "mode:hallucination"]})
+    unlabeled = existing.model_copy(update={"labels": ["docket", "mode:hallucination"]})
     tracker = _RecordingTracker(open_issues_by_filter=[unlabeled])
     drafts = [_draft(cluster_id="new-id", members=["t-1", "t-2", "t-3"])]
     outcomes = await dedup_drafts(drafts, tracker=tracker)

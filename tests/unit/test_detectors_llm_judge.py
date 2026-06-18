@@ -3,12 +3,12 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_triage.detectors import llm_judge as llm_judge_module
-from agent_triage.detectors.llm_judge import LLMJudgeDetector
-from agent_triage.errors import DetectionError
-from agent_triage.llm.base import ModelProvider
-from agent_triage.models.trace import TraceLike
-from agent_triage.rubric.spec import Detection, Mode
+from docket.detectors import llm_judge as llm_judge_module
+from docket.detectors.llm_judge import LLMJudgeDetector
+from docket.errors import DetectionError
+from docket.llm.base import ModelProvider
+from docket.models.trace import TraceLike
+from docket.rubric.spec import Detection, Mode
 
 
 class MockProvider(ModelProvider):

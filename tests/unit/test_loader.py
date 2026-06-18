@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_triage.errors import RubricError, RubricValidationError
-from agent_triage.rubric.loader import load_rubric
+from docket.errors import RubricError, RubricValidationError
+from docket.rubric.loader import load_rubric
 
 
 def test_load_valid_rubric(fixtures_dir: Path) -> None:
@@ -41,7 +41,7 @@ def test_load_valid_full_resolves_shared_import(fixtures_dir: Path) -> None:
     assert mode_ids == {"shared-timeout", "hallucinated-fact", "latency-blowup"}
 
 
-_HEADER = "apiVersion: agent-triage.dev/v1\nkind: Rubric\nmetadata: {name: x, version: '1'}\n"
+_HEADER = "apiVersion: docket.dev/v1\nkind: Rubric\nmetadata: {name: x, version: '1'}\n"
 
 
 def _write_rubric(path: Path, modes_yaml: str) -> Path:
@@ -176,5 +176,5 @@ def test_load_rejects_rubric_importing_broken_llm_judge(tmp_path: Path) -> None:
 
 def test_load_all_builtin_rubrics_pass_semantic_validation() -> None:
     for name in ("agents", "rag", "routing", "multi-agent"):
-        rubric = load_rubric(f"agent-triage.dev/builtin/{name}/v1")
+        rubric = load_rubric(f"docket.dev/builtin/{name}/v1")
         assert rubric.modes

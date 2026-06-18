@@ -1,6 +1,6 @@
 """Tests for Span typed-attribute accessors and OpenInferenceTrace construction."""
 
-from agent_triage.models.trace import OpenInferenceTrace, Span, _parse_indexed_attrs
+from docket.models.trace import OpenInferenceTrace, Span, _parse_indexed_attrs
 
 
 def _llm_span(**extra: object) -> Span:

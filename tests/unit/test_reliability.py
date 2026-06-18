@@ -24,13 +24,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from agent_triage.adapters.base import TraceBackend
-from agent_triage.agent.triage import run_triage_pipeline
-from agent_triage.llm.base import ModelProvider
-from agent_triage.llm.embeddings import EmbeddingProvider
-from agent_triage.models.classification import Annotation
-from agent_triage.models.trace import OpenInferenceTrace, Span
-from agent_triage.rubric.spec import (
+from docket.adapters.base import TraceBackend
+from docket.agent.triage import run_triage_pipeline
+from docket.llm.base import ModelProvider
+from docket.llm.embeddings import EmbeddingProvider
+from docket.models.classification import Annotation
+from docket.models.trace import OpenInferenceTrace, Span
+from docket.rubric.spec import (
     Clustering,
     Detection,
     Mode,
@@ -121,7 +121,7 @@ def _trace(trace_id: str) -> OpenInferenceTrace:
 
 def _rubric() -> Rubric:
     return Rubric(
-        apiVersion="agent-triage.dev/v1",
+        apiVersion="docket.dev/v1",
         kind="Rubric",
         metadata=RubricMetadata(name="rel", version="1", description="reliability test"),
         modes=[

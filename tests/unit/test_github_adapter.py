@@ -6,20 +6,20 @@ from typing import Any
 import httpx
 import pytest
 
-from agent_triage.adapters.tracker.github import (
+from docket.adapters.tracker.github import (
     DEFAULT_GITHUB_API,
     GitHubAdapter,
     _parse_link_next,
 )
-from agent_triage.errors import TrackerError
-from agent_triage.models.issue import IssueDraft, IssuePatch
+from docket.errors import TrackerError
+from docket.models.issue import IssueDraft, IssuePatch
 
 
 def _make_adapter(
     handler: "httpx._types.RequestHandler",  # type: ignore[name-defined]
     *,
-    owner: str = "agent-triage",
-    repo: str = "agent-triage",
+    owner: str = "docket",
+    repo: str = "docket",
 ) -> GitHubAdapter:
     transport = httpx.MockTransport(handler)
     client = httpx.AsyncClient(transport=transport, base_url=DEFAULT_GITHUB_API)
@@ -42,7 +42,7 @@ def _draft(**overrides: Any) -> IssueDraft:
         "member_trace_ids": ["t-1", "t-2"],
         "title": "Agent hallucinates capitals",
         "body": "Body of the issue.\n\nSecond paragraph.",
-        "labels": ["agent-triage", "mode:hallucination", "rubric:agents@1.0.0"],
+        "labels": ["docket", "mode:hallucination", "rubric:agents@1.0.0"],
     }
     base.update(overrides)
     return IssueDraft(**base)
@@ -66,7 +66,7 @@ async def test_default_client_sets_bearer_and_required_headers() -> None:
     assert client.headers.get("Authorization") == "Bearer ghp_xyz"
     assert client.headers.get("Accept") == "application/vnd.github+json"
     assert client.headers.get("X-GitHub-Api-Version") == "2022-11-28"
-    assert client.headers.get("User-Agent") == "agent-triage"
+    assert client.headers.get("User-Agent") == "docket"
     await adapter.close()
 
 
@@ -95,28 +95,28 @@ async def test_list_open_issues_passes_labels_csv_and_open_state() -> None:
                 {
                     "id": 1001,
                     "number": 1,
-                    "html_url": "https://github.com/agent-triage/agent-triage/issues/1",
+                    "html_url": "https://github.com/docket/docket/issues/1",
                     "title": "Existing",
                     "body": "existing body",
                     "state": "open",
-                    "labels": [{"name": "agent-triage"}, {"name": "mode:hallucination"}],
+                    "labels": [{"name": "docket"}, {"name": "mode:hallucination"}],
                 }
             ],
         )
 
     adapter = _make_adapter(handler)
     issues = await adapter.list_open_issues(
-        filter={"labels": ["agent-triage", "mode:hallucination"]},
+        filter={"labels": ["docket", "mode:hallucination"]},
     )
-    assert captured["path"] == "/repos/agent-triage/agent-triage/issues"
+    assert captured["path"] == "/repos/docket/docket/issues"
     assert captured["params"]["state"] == "open"
-    assert captured["params"]["labels"] == "agent-triage,mode:hallucination"
+    assert captured["params"]["labels"] == "docket,mode:hallucination"
     assert len(issues) == 1
     assert issues[0].id == "1"
     assert issues[0].key == "1"
-    assert issues[0].url == "https://github.com/agent-triage/agent-triage/issues/1"
+    assert issues[0].url == "https://github.com/docket/docket/issues/1"
     assert issues[0].state == "open"
-    assert sorted(issues[0].labels) == ["agent-triage", "mode:hallucination"]
+    assert sorted(issues[0].labels) == ["docket", "mode:hallucination"]
 
 
 async def test_list_open_issues_skips_pull_request_items() -> None:
@@ -232,7 +232,7 @@ async def test_search_issues_scopes_query_to_repo_and_kind() -> None:
     results = await adapter.search_issues("paris capital", k=5)
     assert captured["path"] == "/search/issues"
     q = captured["params"]["q"]
-    assert "repo:agent-triage/agent-triage" in q
+    assert "repo:docket/docket" in q
     assert "is:issue" in q
     assert "state:open" in q
     # The user query is quoted so qualifier-like tokens can't rewrite scope.
@@ -254,7 +254,7 @@ async def test_search_issues_quotes_query_and_escapes_embedded_quotes() -> None:
     q = captured["params"]["q"]
     # The whole user query lands inside one quoted term with inner quotes escaped.
     assert '"repo:evil/evil \\"quoted\\" state:closed"' in q
-    assert q.startswith("repo:agent-triage/agent-triage is:issue state:open ")
+    assert q.startswith("repo:docket/docket is:issue state:open ")
 
 
 async def test_search_issues_raises_when_items_missing() -> None:
@@ -280,12 +280,12 @@ async def test_create_issue_posts_markdown_body_directly() -> None:
             json={
                 "id": 42,
                 "number": 42,
-                "html_url": "https://github.com/agent-triage/agent-triage/issues/42",
+                "html_url": "https://github.com/docket/docket/issues/42",
                 "title": "Agent hallucinates capitals",
                 "body": "Body of the issue.\n\nSecond paragraph.",
                 "state": "open",
                 "labels": [
-                    {"name": "agent-triage"},
+                    {"name": "docket"},
                     {"name": "mode:hallucination"},
                     {"name": "rubric:agents@1.0.0"},
                 ],
@@ -296,7 +296,7 @@ async def test_create_issue_posts_markdown_body_directly() -> None:
     draft = _draft()
     issue = await adapter.create_issue(draft)
 
-    assert captured["path"] == "/repos/agent-triage/agent-triage/issues"
+    assert captured["path"] == "/repos/docket/docket/issues"
     body = captured["body"]
     assert body["title"] == draft.title
     # GitHub takes markdown directly — no ADF, no wiki encoding.
@@ -304,7 +304,7 @@ async def test_create_issue_posts_markdown_body_directly() -> None:
     assert body["labels"] == draft.labels
 
     assert issue.key == "42"
-    assert issue.url == "https://github.com/agent-triage/agent-triage/issues/42"
+    assert issue.url == "https://github.com/docket/docket/issues/42"
     assert issue.body == draft.body
     assert sorted(issue.labels) == sorted(draft.labels)
 
@@ -348,7 +348,7 @@ async def test_list_open_issues_retries_429_then_succeeds() -> None:
         return httpx.Response(200, json=[])
 
     adapter = _make_adapter(handler)
-    issues = await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+    issues = await adapter.list_open_issues(filter={"labels": ["docket"]})
     assert issues == []
     assert calls == 2
 
@@ -405,7 +405,7 @@ async def test_list_open_issues_page_cap_logs_warning(
         )
 
     adapter = _make_adapter(handler)
-    with caplog.at_level("WARNING", logger="agent_triage.adapters.tracker.github"):
+    with caplog.at_level("WARNING", logger="docket.adapters.tracker.github"):
         issues = await adapter.list_open_issues()
     assert calls == 20  # _MAX_PAGES
     assert len(issues) == 20
@@ -437,7 +437,7 @@ async def test_update_issue_patches_only_provided_fields() -> None:
     adapter = _make_adapter(handler)
     issue = await adapter.update_issue("42", IssuePatch(title="Updated title"))
     assert captured["method"] == "PATCH"
-    assert captured["path"] == "/repos/agent-triage/agent-triage/issues/42"
+    assert captured["path"] == "/repos/docket/docket/issues/42"
     assert captured["body"] == {"title": "Updated title"}
     assert issue.title == "Updated title"
 
@@ -511,7 +511,7 @@ async def test_comment_on_issue_posts_markdown_body() -> None:
 
     adapter = _make_adapter(handler)
     await adapter.comment_on_issue("42", "New members:\n\n- `t-3`")
-    assert captured["path"] == "/repos/agent-triage/agent-triage/issues/42/comments"
+    assert captured["path"] == "/repos/docket/docket/issues/42/comments"
     assert captured["body"] == {"body": "New members:\n\n- `t-3`"}
 
 

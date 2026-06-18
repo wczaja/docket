@@ -5,8 +5,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: agent-triage version
-      description: Output of `agent-triage --version`.
+      label: docket version
+      description: Output of `docket --version`.
       placeholder: "1.0.0"
     validations:
       required: true

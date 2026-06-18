@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from agent_triage.models.classification import Annotation, Classification
+from docket.models.classification import Annotation, Classification
 
 
 def test_classification_construct() -> None:

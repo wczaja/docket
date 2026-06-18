@@ -8,12 +8,12 @@ from typing import Any
 import httpx
 import pytest
 
-from agent_triage.adapters.trace.langsmith import (
+from docket.adapters.trace.langsmith import (
     DEFAULT_LANGSMITH_ENDPOINT,
     LangsmithAdapter,
 )
-from agent_triage.errors import BackendError
-from agent_triage.models.classification import Annotation
+from docket.errors import BackendError
+from docket.models.classification import Annotation
 
 
 def _make_adapter(
@@ -370,7 +370,7 @@ async def test_annotate_trace_posts_feedback() -> None:
     assert captured["path"] == "/api/v1/feedback"
     body = captured["body"]
     assert body["run_id"] == "run-1"
-    assert body["key"] == "agent-triage:hallucination"
+    assert body["key"] == "docket:hallucination"
     assert body["value"] == "positive"
     assert body["score"] == 0.9
     assert body["extra"]["idempotency_key"].startswith("run-1|r-7|")
@@ -487,11 +487,11 @@ async def test_mark_trace_processed_posts_sentinel_feedback() -> None:
     adapter = _make_adapter(handler)
     await adapter.mark_trace_processed("t-42", run_id="run-abc", rubric_version="agents/v1@1")
     assert captured["path"] == "/api/v1/feedback"
-    assert captured["body"]["key"] == "agent-triage:processed"
+    assert captured["body"]["key"] == "docket:processed"
     assert captured["body"]["run_id"] == "t-42"
     assert captured["body"]["extra"]["run_id"] == "run-abc"
     # Deterministic client-supplied id so re-marking the same trace upserts.
-    expected_key = "t-42|run-abc|agents/v1@1|agent-triage:processed"
+    expected_key = "t-42|run-abc|agents/v1@1|docket:processed"
     assert captured["body"]["id"] == str(uuid.uuid5(uuid.NAMESPACE_URL, expected_key))
 
 
@@ -515,7 +515,7 @@ async def test_list_processed_trace_ids_filters_by_run_id() -> None:
         since=datetime(2026, 5, 22, tzinfo=UTC),
     )
     assert processed == {"t-1", "t-3"}
-    assert page_calls[0]["key"] == "agent-triage:processed"
+    assert page_calls[0]["key"] == "docket:processed"
 
 
 async def test_list_processed_trace_ids_returns_empty_for_unknown_run() -> None:

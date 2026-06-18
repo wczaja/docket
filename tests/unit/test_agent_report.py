@@ -2,11 +2,11 @@
 
 from datetime import UTC, datetime
 
-from agent_triage.agent.report import render_report
-from agent_triage.agent.subagents.poster import DedupOutcome
-from agent_triage.models.cluster import Cluster, ClusterStats
-from agent_triage.models.issue import Issue, IssueDraft, make_labels
-from agent_triage.models.report import ModeStats, RunReport, TraceResult, TrackerFailure
+from docket.agent.report import render_report
+from docket.agent.subagents.poster import DedupOutcome
+from docket.models.cluster import Cluster, ClusterStats
+from docket.models.issue import Issue, IssueDraft, make_labels
+from docket.models.report import ModeStats, RunReport, TraceResult, TrackerFailure
 
 
 def _run_report() -> RunReport:
@@ -35,7 +35,7 @@ def _run_report() -> RunReport:
 
 def test_render_report_minimal() -> None:
     md = render_report(run_report=_run_report(), clusters=[], drafts=[])
-    assert "# agent-triage run `run-001`" in md
+    assert "# docket run `run-001`" in md
     assert "Traces processed**: 60" in md
     assert "**Clusters formed**: 0" in md
     assert "## Frequency by mode" in md
@@ -201,7 +201,7 @@ def test_render_report_includes_error_inventory() -> None:
         )
     )
     # Add a classification with an error to t-fail so error_modes is non-empty.
-    from agent_triage.models.classification import Classification
+    from docket.models.classification import Classification
 
     fail = TraceResult(
         trace_id="t-fail",

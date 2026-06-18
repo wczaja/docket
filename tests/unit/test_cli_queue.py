@@ -1,4 +1,4 @@
-"""Tests for the `agent-triage queue` command group."""
+"""Tests for the `docket queue` command group."""
 
 import json
 from pathlib import Path
@@ -7,9 +7,9 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from agent_triage.cli import main
-from agent_triage.errors import TrackerError
-from agent_triage.models.issue import Issue, IssueDraft, make_labels
+from docket.cli import main
+from docket.errors import TrackerError
+from docket.models.issue import Issue, IssueDraft, make_labels
 
 
 def _draft(cluster_id: str = "c1") -> IssueDraft:
@@ -74,7 +74,7 @@ def test_queue_list_shows_drafts(tmp_path: Path) -> None:
 
 def _invoke_post(tmp_path: Path, tracker: _FakeTracker, *extra: str) -> Any:
     runner = CliRunner()
-    with patch("agent_triage.cli.build_tracker", return_value=tracker):
+    with patch("docket.cli.build_tracker", return_value=tracker):
         return runner.invoke(
             main,
             ["queue", "post", "--queue-dir", str(tmp_path), "--tracker", "github", *extra],
@@ -120,7 +120,7 @@ def test_queue_post_cluster_filter(tmp_path: Path) -> None:
 def test_queue_post_requires_tracker(tmp_path: Path) -> None:
     _write_queue_files(tmp_path, _draft("c1"))
     runner = CliRunner()
-    with patch("agent_triage.cli.build_tracker", return_value=None):
+    with patch("docket.cli.build_tracker", return_value=None):
         result = runner.invoke(main, ["queue", "post", "--queue-dir", str(tmp_path)])
     assert result.exit_code == 1
     assert "No tracker configured" in result.output
@@ -130,7 +130,7 @@ def test_queue_post_prompts_without_yes(tmp_path: Path) -> None:
     _write_queue_files(tmp_path, _draft("c1"))
     tracker = _FakeTracker()
     runner = CliRunner()
-    with patch("agent_triage.cli.build_tracker", return_value=tracker):
+    with patch("docket.cli.build_tracker", return_value=tracker):
         result = runner.invoke(
             main,
             ["queue", "post", "--queue-dir", str(tmp_path), "--tracker", "github"],

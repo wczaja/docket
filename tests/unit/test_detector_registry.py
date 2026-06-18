@@ -1,11 +1,11 @@
 import pytest
 
-from agent_triage.detectors import get_detector
-from agent_triage.detectors.composite import CompositeDetector
-from agent_triage.detectors.metric_threshold import MetricThresholdDetector
-from agent_triage.detectors.regex import RegexDetector
-from agent_triage.detectors.tool_call import ToolCallDetector
-from agent_triage.errors import DetectionError
+from docket.detectors import get_detector
+from docket.detectors.composite import CompositeDetector
+from docket.detectors.metric_threshold import MetricThresholdDetector
+from docket.detectors.regex import RegexDetector
+from docket.detectors.tool_call import ToolCallDetector
+from docket.errors import DetectionError
 
 
 def test_get_detector_returns_correct_types() -> None:
@@ -26,8 +26,8 @@ def test_get_detector_llm_judge_without_provider_raises() -> None:
 
 
 def test_get_detector_llm_judge_with_provider() -> None:
-    from agent_triage.detectors.llm_judge import LLMJudgeDetector
-    from agent_triage.llm.base import ModelProvider
+    from docket.detectors.llm_judge import LLMJudgeDetector
+    from docket.llm.base import ModelProvider
 
     class _DummyProvider(ModelProvider):
         model = "dummy:1"

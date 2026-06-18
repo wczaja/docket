@@ -19,11 +19,11 @@ from datetime import UTC, datetime, timedelta
 import httpx
 import pytest
 
-from agent_triage._acceptance import build_acceptance_cases
-from agent_triage.adapters.trace.phoenix import PhoenixAdapter
-from agent_triage.agent.triage import run_triage_pipeline
-from agent_triage.llm import build_embedding_provider, build_provider
-from agent_triage.rubric.loader import load_rubric
+from docket._acceptance import build_acceptance_cases
+from docket.adapters.trace.phoenix import PhoenixAdapter
+from docket.agent.triage import run_triage_pipeline
+from docket.llm import build_embedding_provider, build_provider
+from docket.rubric.loader import load_rubric
 
 pytestmark = pytest.mark.integration
 
@@ -87,7 +87,7 @@ async def test_recall_and_precision_meet_acceptance(
 
     # 2. Run triage against the same Phoenix.
     adapter = PhoenixAdapter(base_url=phoenix_url)
-    rubric = load_rubric("agent-triage.dev/builtin/agents/v1")
+    rubric = load_rubric("docket.dev/builtin/agents/v1")
     provider = build_provider("anthropic:claude-haiku-4-5-20251001")
     embeddings = build_embedding_provider("openai:text-embedding-3-small")
     now = datetime.now(UTC)

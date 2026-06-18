@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from anthropic.types import ToolUseBlock
 
-from agent_triage.errors import CredentialError, DetectionError
-from agent_triage.llm._anthropic import AnthropicProvider
+from docket.errors import CredentialError, DetectionError
+from docket.llm._anthropic import AnthropicProvider
 
 
 def _mock_client_returning(blocks: list[Any]) -> Any:

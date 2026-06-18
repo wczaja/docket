@@ -6,12 +6,12 @@ from typing import Any
 import httpx
 import pytest
 
-from agent_triage.adapters.tracker.linear import (
+from docket.adapters.tracker.linear import (
     DEFAULT_LINEAR_ENDPOINT,
     LinearAdapter,
 )
-from agent_triage.errors import TrackerError
-from agent_triage.models.issue import IssueDraft, IssuePatch
+from docket.errors import TrackerError
+from docket.models.issue import IssueDraft, IssuePatch
 
 
 def _make_adapter(
@@ -35,7 +35,7 @@ def _draft(**overrides: Any) -> IssueDraft:
         "member_trace_ids": ["t-1", "t-2"],
         "title": "Agent hallucinates capitals",
         "body": "Body of the issue.\n\nSecond paragraph.",
-        "labels": ["agent-triage", "mode:hallucination", "rubric:agents@1.0.0"],
+        "labels": ["docket", "mode:hallucination", "rubric:agents@1.0.0"],
     }
     base.update(overrides)
     return IssueDraft(**base)
@@ -82,13 +82,13 @@ async def test_list_open_issues_filters_by_team_and_labels() -> None:
                             {
                                 "id": "linear-issue-1",
                                 "identifier": "AGT-1",
-                                "url": "https://linear.app/agent-triage/issue/AGT-1",
+                                "url": "https://linear.app/docket/issue/AGT-1",
                                 "title": "Existing",
                                 "description": "existing body",
                                 "state": {"name": "Todo", "type": "unstarted"},
                                 "labels": {
                                     "nodes": [
-                                        {"name": "agent-triage"},
+                                        {"name": "docket"},
                                         {"name": "mode:hallucination"},
                                     ]
                                 },
@@ -101,7 +101,7 @@ async def test_list_open_issues_filters_by_team_and_labels() -> None:
 
     adapter = _make_adapter(handler)
     issues = await adapter.list_open_issues(
-        filter={"labels": ["agent-triage", "mode:hallucination"]},
+        filter={"labels": ["docket", "mode:hallucination"]},
     )
     payload = captured["body"]
     variables = payload["variables"]
@@ -109,13 +109,13 @@ async def test_list_open_issues_filters_by_team_and_labels() -> None:
     assert f["team"] == {"id": {"eq": "team-123"}}
     assert f["state"]["type"]["in"] == ["triage", "backlog", "unstarted", "started"]
     label_clauses = f["labels"]["and"]
-    assert {"name": {"eq": "agent-triage"}} in label_clauses
+    assert {"name": {"eq": "docket"}} in label_clauses
     assert {"name": {"eq": "mode:hallucination"}} in label_clauses
     assert len(issues) == 1
     assert issues[0].key == "AGT-1"
-    assert issues[0].url == "https://linear.app/agent-triage/issue/AGT-1"
+    assert issues[0].url == "https://linear.app/docket/issue/AGT-1"
     assert issues[0].body == "existing body"
-    assert issues[0].labels == ["agent-triage", "mode:hallucination"]
+    assert issues[0].labels == ["docket", "mode:hallucination"]
     assert issues[0].state == "open"
 
 
@@ -126,8 +126,8 @@ async def test_dedup_finds_existing_issue_in_triage_state() -> None:
     created every run. The handler honors the requested state filter the way
     Linear does: the stored issue is returned only if its state type was asked
     for."""
-    from agent_triage.agent.subagents.poster import dedup_drafts
-    from agent_triage.models.issue import IssueProvenance, make_labels
+    from docket.agent.subagents.poster import dedup_drafts
+    from docket.models.issue import IssueProvenance, make_labels
 
     mode_id = "hallucination"
     rubric_version = "agents@1.0.0"
@@ -152,7 +152,7 @@ async def test_dedup_finds_existing_issue_in_triage_state() -> None:
                 {
                     "id": "linear-1",
                     "identifier": "AGT-1",
-                    "url": "https://linear.app/agent-triage/issue/AGT-1",
+                    "url": "https://linear.app/docket/issue/AGT-1",
                     "title": "Existing",
                     "description": f"body\n\n{prov.to_html_comment()}",
                     "state": {"name": "Triage", "type": "triage"},
@@ -174,7 +174,7 @@ def _node(node_id: str, identifier: str) -> dict[str, Any]:
     return {
         "id": node_id,
         "identifier": identifier,
-        "url": f"https://linear.app/agent-triage/issue/{identifier}",
+        "url": f"https://linear.app/docket/issue/{identifier}",
         "title": identifier,
         "description": "",
         "state": {"name": "Todo", "type": "unstarted"},
@@ -214,7 +214,7 @@ async def test_list_open_issues_follows_end_cursor_pagination() -> None:
         )
 
     adapter = _make_adapter(handler)
-    issues = await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+    issues = await adapter.list_open_issues(filter={"labels": ["docket"]})
     assert [i.key for i in issues] == ["AGT-1", "AGT-2"]
     assert cursors_seen == [None, "cur-2"]
 
@@ -241,7 +241,7 @@ async def test_list_open_issues_page_cap_logs_warning(
         )
 
     adapter = _make_adapter(handler)
-    with caplog.at_level("WARNING", logger="agent_triage.adapters.tracker.linear"):
+    with caplog.at_level("WARNING", logger="docket.adapters.tracker.linear"):
         issues = await adapter.list_open_issues()
     assert calls == 20  # _MAX_PAGES
     assert len(issues) == 20
@@ -390,7 +390,7 @@ async def test_create_issue_resolves_labels_and_returns_issue() -> None:
                         "team": {
                             "labels": {
                                 "nodes": [
-                                    {"id": "lbl-1", "name": "agent-triage"},
+                                    {"id": "lbl-1", "name": "docket"},
                                     {"id": "lbl-2", "name": "mode:hallucination"},
                                 ]
                             }
@@ -420,13 +420,13 @@ async def test_create_issue_resolves_labels_and_returns_issue() -> None:
                         "issue": {
                             "id": "linear-42",
                             "identifier": "AGT-42",
-                            "url": "https://linear.app/agent-triage/issue/AGT-42",
+                            "url": "https://linear.app/docket/issue/AGT-42",
                             "title": "Agent hallucinates capitals",
                             "description": "Body of the issue.\n\nSecond paragraph.",
                             "state": {"name": "Triage", "type": "triage"},
                             "labels": {
                                 "nodes": [
-                                    {"name": "agent-triage"},
+                                    {"name": "docket"},
                                     {"name": "mode:hallucination"},
                                     {"name": "rubric:agents@1.0.0"},
                                 ]
@@ -447,10 +447,10 @@ async def test_create_issue_resolves_labels_and_returns_issue() -> None:
     assert sorted(create_call["variables"]["input"]["labelIds"]) == ["lbl-1", "lbl-2", "lbl-3"]
     assert issue.id == "linear-42"
     assert issue.key == "AGT-42"
-    assert issue.url == "https://linear.app/agent-triage/issue/AGT-42"
+    assert issue.url == "https://linear.app/docket/issue/AGT-42"
     assert issue.title == "Agent hallucinates capitals"
     assert issue.body == "Body of the issue.\n\nSecond paragraph."
-    assert sorted(issue.labels) == ["agent-triage", "mode:hallucination", "rubric:agents@1.0.0"]
+    assert sorted(issue.labels) == ["docket", "mode:hallucination", "rubric:agents@1.0.0"]
 
 
 async def test_create_issue_raises_when_mutation_unsuccessful() -> None:
@@ -532,7 +532,7 @@ async def test_label_id_cache_avoids_refetch_across_calls() -> None:
                         "team": {
                             "labels": {
                                 "nodes": [
-                                    {"id": "lbl-1", "name": "agent-triage"},
+                                    {"id": "lbl-1", "name": "docket"},
                                     {"id": "lbl-2", "name": "mode:hallucination"},
                                     {"id": "lbl-3", "name": "rubric:agents@1.0.0"},
                                 ]
@@ -579,7 +579,7 @@ def _issue_create_response() -> httpx.Response:
                     "issue": {
                         "id": "linear-1",
                         "identifier": "AGT-1",
-                        "url": "https://linear.app/agent-triage/issue/AGT-1",
+                        "url": "https://linear.app/docket/issue/AGT-1",
                         "title": "t",
                         "description": "b",
                         "state": {"name": "Triage", "type": "triage"},
@@ -602,7 +602,7 @@ async def test_list_open_issues_retries_429_then_succeeds() -> None:
         return httpx.Response(200, json={"data": {"issues": {"nodes": []}}})
 
     adapter = _make_adapter(handler)
-    issues = await adapter.list_open_issues(filter={"labels": ["agent-triage"]})
+    issues = await adapter.list_open_issues(filter={"labels": ["docket"]})
     assert issues == []
     assert calls == 2
 
@@ -827,9 +827,7 @@ async def test_label_cache_is_case_insensitive() -> None:
         if "labels(first:" in query:
             return httpx.Response(
                 200,
-                json=_label_page(
-                    [{"id": "lbl-1", "name": "Agent-Triage"}], has_next=False, cursor=None
-                ),
+                json=_label_page([{"id": "lbl-1", "name": "Docket"}], has_next=False, cursor=None),
             )
         if "issueLabelCreate" in query:
             raise AssertionError("label should be matched case-insensitively, not re-created")
@@ -846,7 +844,7 @@ async def test_label_cache_is_case_insensitive() -> None:
                             "title": "t",
                             "description": "b",
                             "state": {"name": "Triage", "type": "triage"},
-                            "labels": {"nodes": [{"name": "Agent-Triage"}]},
+                            "labels": {"nodes": [{"name": "Docket"}]},
                         },
                     }
                 }
@@ -854,7 +852,7 @@ async def test_label_cache_is_case_insensitive() -> None:
         )
 
     adapter = _make_adapter(handler)
-    issue = await adapter.create_issue(_draft(labels=["agent-triage"]))
+    issue = await adapter.create_issue(_draft(labels=["docket"]))
     assert issue.id == "l-1"
 
 
@@ -876,9 +874,7 @@ async def test_label_cache_paginates() -> None:
                 )
             return httpx.Response(
                 200,
-                json=_label_page(
-                    [{"id": "lbl-2", "name": "agent-triage"}], has_next=False, cursor=None
-                ),
+                json=_label_page([{"id": "lbl-2", "name": "docket"}], has_next=False, cursor=None),
             )
         if "issueLabelCreate" in query:
             raise AssertionError("label exists on page 2; must not be re-created")
@@ -895,7 +891,7 @@ async def test_label_cache_paginates() -> None:
                             "title": "t",
                             "description": "b",
                             "state": {"name": "Triage", "type": "triage"},
-                            "labels": {"nodes": [{"name": "agent-triage"}]},
+                            "labels": {"nodes": [{"name": "docket"}]},
                         },
                     }
                 }
@@ -903,7 +899,7 @@ async def test_label_cache_paginates() -> None:
         )
 
     adapter = _make_adapter(handler)
-    await adapter.create_issue(_draft(labels=["agent-triage"]))
+    await adapter.create_issue(_draft(labels=["docket"]))
     assert pages == 2
 
 
@@ -923,9 +919,7 @@ async def test_label_create_race_falls_back_to_refetch() -> None:
             # Refetch after the failed create: another run created it meanwhile.
             return httpx.Response(
                 200,
-                json=_label_page(
-                    [{"id": "lbl-9", "name": "agent-triage"}], has_next=False, cursor=None
-                ),
+                json=_label_page([{"id": "lbl-9", "name": "docket"}], has_next=False, cursor=None),
             )
         if "issueLabelCreate" in query:
             return httpx.Response(
@@ -945,7 +939,7 @@ async def test_label_create_race_falls_back_to_refetch() -> None:
                             "title": "t",
                             "description": "b",
                             "state": {"name": "Triage", "type": "triage"},
-                            "labels": {"nodes": [{"name": "agent-triage"}]},
+                            "labels": {"nodes": [{"name": "docket"}]},
                         },
                     }
                 }
@@ -953,6 +947,6 @@ async def test_label_create_race_falls_back_to_refetch() -> None:
         )
 
     adapter = _make_adapter(handler)
-    issue = await adapter.create_issue(_draft(labels=["agent-triage"]))
+    issue = await adapter.create_issue(_draft(labels=["docket"]))
     assert issue.id == "l-9"
     assert label_fetches == 2

@@ -9,7 +9,7 @@ Phase 10 deliverable (design §7): classify 1000 traces with the builtin
 The benchmark generates 1000 synthetic OpenInference traces (one LLM span
 each, half with an additional tool span, ~10% seeded with failure-shaped
 responses) and runs them through the real `Classifier` — the same code
-path `agent-triage run` uses, including trace projection, detector
+path `docket run` uses, including trace projection, detector
 dispatch, retry, and concurrency machinery. The LLM provider is a stub
 that counts calls, so the run is free and the *call count* (what you pay
 for) is exact rather than estimated; per-call latency can be simulated to
@@ -38,7 +38,7 @@ it should be. With a 400 ms-per-call provider, projected wall time is
 roughly `3000 calls × 0.4 s / concurrency`.
 
 **Projected cost for the 1000-trace run** (3000 calls × ~1500 input +
-~200 output tokens, baked price table in `agent_triage/cost.py`):
+~200 output tokens, baked price table in `docket/cost.py`):
 
 | Model | Cost |
 |---|---|
@@ -49,7 +49,7 @@ Per 100 traces this is $0.10–$0.75 depending on model — within the
 design §9 target on `gpt-4o-mini`, above it on current Haiku pricing.
 Trace size is the dominant variable (the ~1500-token input shape is the
 acceptance-fixture mean; production traces vary ~30×), so treat these as
-planning numbers and use `agent-triage run --dry-run` against your own
+planning numbers and use `docket run --dry-run` against your own
 window before committing to a schedule.
 
 ## Reproducing

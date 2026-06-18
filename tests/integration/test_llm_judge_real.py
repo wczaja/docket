@@ -11,10 +11,10 @@ correctly under normal conditions.
 
 import pytest
 
-from agent_triage.detectors.llm_judge import LLMJudgeDetector
-from agent_triage.llm._anthropic import AnthropicProvider
-from agent_triage.models.trace import TraceLike
-from agent_triage.rubric.spec import Detection, Mode
+from docket.detectors.llm_judge import LLMJudgeDetector
+from docket.llm._anthropic import AnthropicProvider
+from docket.models.trace import TraceLike
+from docket.rubric.spec import Detection, Mode
 
 pytestmark = pytest.mark.integration
 

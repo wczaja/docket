@@ -1,4 +1,4 @@
-"""Tests for the `agent-triage serve` daemon command."""
+"""Tests for the `docket serve` daemon command."""
 
 from datetime import UTC, datetime
 from pathlib import Path
@@ -7,10 +7,10 @@ from unittest.mock import patch
 
 from click.testing import CliRunner
 
-from agent_triage.agent.triage import TriageResult
-from agent_triage.cli import main
-from agent_triage.errors import BackendError
-from agent_triage.models.report import ModeStats, RunReport
+from docket.agent.triage import TriageResult
+from docket.cli import main
+from docket.errors import BackendError
+from docket.models.report import ModeStats, RunReport
 
 
 class _NoopBackend:
@@ -46,7 +46,7 @@ def _serve_args(tmp_path: Path, *extra: str) -> list[str]:
         "--phoenix-url",
         "http://test:6006",
         "--rubric",
-        "agent-triage.dev/builtin/agents/v1",
+        "docket.dev/builtin/agents/v1",
         "--config",
         str(tmp_path / "missing.yaml"),
         "--interval",
@@ -65,10 +65,10 @@ def test_serve_ticks_tile_windows_exactly(tmp_path: Path) -> None:
 
     runner = CliRunner()
     with (
-        patch("agent_triage.cli.build_backend", return_value=_NoopBackend()),
-        patch("agent_triage.cli.run_triage_pipeline", side_effect=fake_pipeline),
-        patch("agent_triage.cli.build_provider"),
-        patch("agent_triage.cli.time.sleep") as fake_sleep,
+        patch("docket.cli.build_backend", return_value=_NoopBackend()),
+        patch("docket.cli.run_triage_pipeline", side_effect=fake_pipeline),
+        patch("docket.cli.build_provider"),
+        patch("docket.cli.time.sleep") as fake_sleep,
     ):
         result = runner.invoke(main, _serve_args(tmp_path, "--max-ticks", "2"))
 
@@ -95,10 +95,10 @@ def test_serve_failed_tick_does_not_advance_window(tmp_path: Path) -> None:
 
     runner = CliRunner()
     with (
-        patch("agent_triage.cli.build_backend", return_value=_NoopBackend()),
-        patch("agent_triage.cli.run_triage_pipeline", side_effect=flaky_pipeline),
-        patch("agent_triage.cli.build_provider"),
-        patch("agent_triage.cli.time.sleep"),
+        patch("docket.cli.build_backend", return_value=_NoopBackend()),
+        patch("docket.cli.run_triage_pipeline", side_effect=flaky_pipeline),
+        patch("docket.cli.build_provider"),
+        patch("docket.cli.time.sleep"),
     ):
         result = runner.invoke(main, _serve_args(tmp_path, "--max-ticks", "2"))
 
@@ -120,10 +120,10 @@ def test_serve_respects_max_ticks(tmp_path: Path) -> None:
 
     runner = CliRunner()
     with (
-        patch("agent_triage.cli.build_backend", return_value=_NoopBackend()),
-        patch("agent_triage.cli.run_triage_pipeline", side_effect=fake_pipeline),
-        patch("agent_triage.cli.build_provider"),
-        patch("agent_triage.cli.time.sleep"),
+        patch("docket.cli.build_backend", return_value=_NoopBackend()),
+        patch("docket.cli.run_triage_pipeline", side_effect=fake_pipeline),
+        patch("docket.cli.build_provider"),
+        patch("docket.cli.time.sleep"),
     ):
         result = runner.invoke(main, _serve_args(tmp_path, "--max-ticks", "3"))
 
@@ -139,7 +139,7 @@ def test_serve_exits_on_config_error(tmp_path: Path) -> None:
         [
             "serve",
             "--rubric",
-            "agent-triage.dev/builtin/agents/v1",
+            "docket.dev/builtin/agents/v1",
             "--config",
             str(tmp_path / "missing.yaml"),
             "--max-ticks",
@@ -167,9 +167,9 @@ def test_serve_first_window_spans_one_interval(tmp_path: Path) -> None:
 
     runner = CliRunner()
     with (
-        patch("agent_triage.cli.build_backend", return_value=_NoopBackend()),
-        patch("agent_triage.cli.run_triage_pipeline", side_effect=fake_pipeline),
-        patch("agent_triage.cli.build_provider"),
+        patch("docket.cli.build_backend", return_value=_NoopBackend()),
+        patch("docket.cli.run_triage_pipeline", side_effect=fake_pipeline),
+        patch("docket.cli.build_provider"),
     ):
         result = runner.invoke(main, _serve_args(tmp_path, "--max-ticks", "1"))
 

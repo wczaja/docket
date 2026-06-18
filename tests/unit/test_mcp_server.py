@@ -11,16 +11,16 @@ from typing import Any
 
 import pytest
 
-import agent_triage.mcp_servers._common as _common
-from agent_triage.adapters.base import TraceBackend
-from agent_triage.errors import BackendError
-from agent_triage.mcp_servers.adapter_phoenix import (
+import docket.mcp_servers._common as _common
+from docket.adapters.base import TraceBackend
+from docket.errors import BackendError
+from docket.mcp_servers.adapter_phoenix import (
     SERVER_NAME,
     TOOLS,
     dispatch_tool,
 )
-from agent_triage.models.classification import Annotation
-from agent_triage.models.trace import OpenInferenceTrace, Span
+from docket.models.classification import Annotation
+from docket.models.trace import OpenInferenceTrace, Span
 
 
 class _FakeBackend(TraceBackend):
@@ -82,7 +82,7 @@ def test_tool_manifest_lists_all_six_methods() -> None:
 
 
 def test_server_name() -> None:
-    assert SERVER_NAME == "agent-triage-adapter-phoenix"
+    assert SERVER_NAME == "docket-adapter-phoenix"
 
 
 async def test_dispatch_list_traces_passes_args() -> None:

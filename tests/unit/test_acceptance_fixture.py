@@ -5,7 +5,7 @@ it claims. These tests pin the shape and labels in-process so a broken
 fixture surfaces before any docker compose runs.
 """
 
-from agent_triage._acceptance import (
+from docket._acceptance import (
     _REFUSAL_LEAKAGE_SIMILAR_VARIANTS,
     acceptance_summary,
     build_acceptance_cases,

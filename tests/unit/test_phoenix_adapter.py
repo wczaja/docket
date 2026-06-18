@@ -12,9 +12,9 @@ from typing import Any
 import httpx
 import pytest
 
-from agent_triage.adapters.trace.phoenix import PhoenixAdapter
-from agent_triage.errors import BackendError
-from agent_triage.models.classification import Annotation
+from docket.adapters.trace.phoenix import PhoenixAdapter
+from docket.errors import BackendError
+from docket.models.classification import Annotation
 
 
 def _make_adapter(
@@ -230,7 +230,7 @@ async def test_annotate_trace_sends_payload_targeting_root_span() -> None:
     # The annotation targets the trace's root span, not the trace ID.
     assert record["span_id"] == "s-root"
     assert record["trace_id"] == "t-1"
-    assert record["name"] == "agent-triage:hallucination"
+    assert record["name"] == "docket:hallucination"
     assert record["identifier"] == annotation.idempotency_key()
     assert record["metadata"]["run_id"] == "run-1"
     assert record["metadata"]["idempotency_key"] == annotation.idempotency_key()
@@ -373,11 +373,11 @@ async def test_mark_trace_processed_writes_sentinel_annotation() -> None:
     await adapter.mark_trace_processed("t-42", run_id="run-abc", rubric_version="agents/v1@1")
     assert captured["path"] == "/v1/span_annotations"
     record = captured["body"]["data"][0]
-    assert record["name"] == "agent-triage:processed"
+    assert record["name"] == "docket:processed"
     # The sentinel targets the trace's root span, not the trace ID.
     assert record["span_id"] == "s-root"
     assert record["trace_id"] == "t-42"
-    assert record["identifier"] == "t-42|run-abc|agents/v1@1|agent-triage:processed"
+    assert record["identifier"] == "t-42|run-abc|agents/v1@1|docket:processed"
     assert record["metadata"]["run_id"] == "run-abc"
     assert record["metadata"]["rubric_version"] == "agents/v1@1"
 

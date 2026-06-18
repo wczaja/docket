@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from agent_triage.errors import CredentialError, DetectionError
-from agent_triage.llm.embeddings import (
+from docket.errors import CredentialError, DetectionError
+from docket.llm.embeddings import (
     DEFAULT_OPENAI_EMBEDDING_MODEL,
     DEFAULT_VOYAGE_EMBEDDING_MODEL,
     OpenAIEmbeddingProvider,

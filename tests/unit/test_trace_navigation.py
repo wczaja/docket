@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_triage.models.otlp import from_otlp
+from docket.models.otlp import from_otlp
 
 
 @pytest.fixture
@@ -81,7 +81,7 @@ def test_get_final_response_orders_by_end_time(multi_agent_trace) -> None:  # ty
 
 
 def test_get_final_response_none_when_no_llm_spans(simple_trace) -> None:  # type: ignore[no-untyped-def]
-    from agent_triage.models.trace import OpenInferenceTrace
+    from docket.models.trace import OpenInferenceTrace
 
     empty = OpenInferenceTrace(trace_id="t1", spans=[])
     assert empty.get_final_response() is None
@@ -121,7 +121,7 @@ def test_to_trace_like_counts_errors(error_trace) -> None:  # type: ignore[no-un
 
 
 def test_to_trace_like_empty_spans() -> None:
-    from agent_triage.models.trace import OpenInferenceTrace
+    from docket.models.trace import OpenInferenceTrace
 
     empty = OpenInferenceTrace(trace_id="t1", spans=[])
     trace_like = empty.to_trace_like()

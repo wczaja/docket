@@ -24,10 +24,10 @@ trace plus a summary.
 ## 3. Run triage against Phoenix
 
 ```bash
-agent-triage run \
+docket run \
   --backend phoenix \
   --phoenix-url http://localhost:6006 \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 ```
 

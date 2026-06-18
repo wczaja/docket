@@ -8,7 +8,7 @@ Issues end to end; this document is for picking your own combination.
 ## Prerequisites
 
 ```bash
-pip install agent-triage          # or: uv pip install agent-triage
+pip install docket          # or: uv pip install docket
 
 export ANTHROPIC_API_KEY=...      # for llm_judge detectors (or OPENAI_API_KEY)
 export OPENAI_API_KEY=...         # required for clustering even when the
@@ -21,7 +21,7 @@ backend / tracker of your choice.
 
 ## Configure a trace backend
 
-agent-triage reads traces; it does not host them. Pick the backend you
+docket reads traces; it does not host them. Pick the backend you
 already use:
 
 ### Phoenix (local Docker, simplest for dev)
@@ -31,7 +31,7 @@ docker run -p 6006:6006 -p 4317:4317 arizephoenix/phoenix:latest
 ```
 
 ```bash
-agent-triage run \
+docket run \
   --backend phoenix \
   --phoenix-url http://localhost:6006 \
   ...
@@ -43,7 +43,7 @@ the OpenInference instrumentation packages.
 ### Langfuse
 
 ```bash
-agent-triage run \
+docket run \
   --backend langfuse \
   --langfuse-host https://cloud.langfuse.com \
   --langfuse-public-key "$LANGFUSE_PUBLIC_KEY" \
@@ -56,7 +56,7 @@ See [docs/local-langfuse.md](local-langfuse.md) for self-hosted setup.
 ### LangSmith
 
 ```bash
-agent-triage run \
+docket run \
   --backend langsmith \
   --langsmith-api-key "$LANGSMITH_API_KEY" \
   --langsmith-project agents-v1 \
@@ -67,7 +67,7 @@ See [docs/local-langsmith.md](local-langsmith.md).
 
 ## Configure a tracker (optional)
 
-If no `--tracker` flag is set, agent-triage queues drafts to local files
+If no `--tracker` flag is set, docket queues drafts to local files
 and stops. To dedup against an existing tracker and (optionally)
 auto-post:
 
@@ -75,7 +75,7 @@ auto-post:
 
 ```bash
 # Cloud
-agent-triage run ... \
+docket run ... \
   --tracker jira \
   --jira-host https://example.atlassian.net \
   --jira-project AGT \
@@ -83,7 +83,7 @@ agent-triage run ... \
   --jira-api-token "$JIRA_API_TOKEN"
 
 # Data Center
-agent-triage run ... \
+docket run ... \
   --tracker jira \
   --jira-host https://jira.internal.example.com \
   --jira-project AGT \
@@ -98,7 +98,7 @@ transitions.
 ### Linear
 
 ```bash
-agent-triage run ... \
+docket run ... \
   --tracker linear \
   --linear-api-key "$LINEAR_API_KEY" \
   --linear-team "$LINEAR_TEAM_ID"
@@ -111,7 +111,7 @@ key. See [docs/local-linear.md](local-linear.md).
 ### GitHub Issues
 
 ```bash
-agent-triage run ... \
+docket run ... \
   --tracker github \
   --github-token "$GITHUB_TOKEN" \
   --github-owner my-org \
@@ -127,10 +127,10 @@ https://github.acme.internal/api/v3`. See
 Pick a built-in:
 
 ```bash
---rubric agent-triage.dev/builtin/agents/v1      # generic agents (6 modes)
---rubric agent-triage.dev/builtin/rag/v1         # retrieval failures
---rubric agent-triage.dev/builtin/routing/v1     # router / supervisor
---rubric agent-triage.dev/builtin/multi-agent/v1 # multi-agent coordination
+--rubric docket.dev/builtin/agents/v1      # generic agents (6 modes)
+--rubric docket.dev/builtin/rag/v1         # retrieval failures
+--rubric docket.dev/builtin/routing/v1     # router / supervisor
+--rubric docket.dev/builtin/multi-agent/v1 # multi-agent coordination
 ```
 
 Or point at your own YAML (compose by `imports:` at the top — see
@@ -143,7 +143,7 @@ Or point at your own YAML (compose by `imports:` at the top — see
 Validate before running:
 
 ```bash
-agent-triage validate ./rubrics/my-agent.yaml
+docket validate ./rubrics/my-agent.yaml
 ```
 
 ## Three modes of operation
@@ -151,15 +151,15 @@ agent-triage validate ./rubrics/my-agent.yaml
 ### A. Read-only (default)
 
 ```bash
-agent-triage run \
+docket run \
   --backend phoenix --phoenix-url http://localhost:6006 \
-  --rubric agent-triage.dev/builtin/agents/v1 \
+  --rubric docket.dev/builtin/agents/v1 \
   --since 1h
 ```
 
 - Reads traces (no writeback to backend).
 - Classifies + clusters + drafts.
-- Writes drafts to `~/.agent-triage/queued-issues/<run-id>/`.
+- Writes drafts to `~/.docket/queued-issues/<run-id>/`.
 - Writes a markdown report to the same directory.
 - **Posts nothing to a tracker** (no `--tracker` flag).
 
@@ -169,7 +169,7 @@ reasonable, layer a tracker on top.
 ### B. Dedup against tracker, queue new drafts locally
 
 ```bash
-agent-triage run ... \
+docket run ... \
   --tracker github --github-owner my-org --github-repo agents
 ```
 
@@ -188,7 +188,7 @@ explicit action.
 ### C. Interactive review (`--review`)
 
 ```bash
-agent-triage run ... --tracker github ... --review
+docket run ... --tracker github ... --review
 ```
 
 For each `needs_create` outcome, the runtime:
@@ -205,12 +205,12 @@ containers.
 ### D. Auto-post above a severity threshold
 
 ```bash
-agent-triage run ... --tracker github ... --auto-post-threshold high
+docket run ... --tracker github ... --auto-post-threshold high
 ```
 
 Drafts whose cluster severity is `high` or `critical` are posted
 automatically. Lower-severity drafts stay in the queue. This is the
-"run agent-triage in CI" mode — once you've calibrated the rubric and
+"run docket in CI" mode — once you've calibrated the rubric and
 trust the false-positive rate, you can ratchet the threshold down.
 
 Combine with `--review` to auto-post above threshold AND open lower-
@@ -219,31 +219,31 @@ severity drafts for review in the same run.
 ## Config file
 
 The full flag set is large; for production use, write an
-`agent-triage.yaml`:
+`docket.yaml`:
 
 ```yaml
 trace_backend:
   type: mcp
-  command: agent-triage-adapter-phoenix
+  command: docket-adapter-phoenix
   env:
     PHOENIX_URL: http://localhost:6006
 
 tracker:
   type: mcp
-  command: agent-triage-adapter-github
+  command: docket-adapter-github
   env:
     GITHUB_TOKEN: ${GITHUB_TOKEN}
     GITHUB_OWNER: my-org
     GITHUB_REPO: agents
 
-rubric: agent-triage.dev/builtin/agents/v1
+rubric: docket.dev/builtin/agents/v1
 auto_post_threshold: high
 ```
 
 Then:
 
 ```bash
-agent-triage run --config agent-triage.yaml --since 1h
+docket run --config docket.yaml --since 1h
 ```
 
 CLI flags always override config values, so you can keep prod settings
@@ -266,20 +266,20 @@ Preview a run and gate CI on it — `--dry-run` exits non-zero iff the
 real run would abort:
 
 ```bash
-agent-triage run --config agent-triage.yaml --since 24h --dry-run
+docket run --config docket.yaml --since 24h --dry-run
 ```
 
 For windows too large to enumerate, sample:
 
 ```bash
 # 100 seeded-random traces from the window
-agent-triage run ... --sample 100
+docket run ... --sample 100
 
 # only traces whose root span errored (filter pushed down to the backend)
-agent-triage run ... --sample 100 --strategy errors-only
+docket run ... --sample 100 --strategy errors-only
 
 # equal allocation across tenants, so small tenants get seen
-agent-triage run ... --sample 90 --strategy stratified --stratify-by tag:tenant_id
+docket run ... --sample 90 --strategy stratified --stratify-by tag:tenant_id
 ```
 
 Sampling is seeded by the `run_id`, so re-runs of the same window (and
@@ -290,7 +290,7 @@ window.
 
 ## What happens on re-run
 
-agent-triage is designed to be re-run safely. The `run_id` for a given
+docket is designed to be re-run safely. The `run_id` for a given
 `(backend, rubric, since, until)` window is deterministic:
 
 ```
@@ -309,14 +309,14 @@ Re-running the same window:
   (very large backlogs), drafts that would have auto-posted are queued
   as `needs_create` instead — "no duplicate found" wasn't proven — and
   the report says so. Raise `GITHUB_/JIRA_/LINEAR_MAX_LIST_PAGES` in the
-  tracker's env block or prune old agent-triage issues.
+  tracker's env block or prune old docket issues.
 
-This is what makes scheduled runs (`agent-triage run --since 1h` every
+This is what makes scheduled runs (`docket run --since 1h` every
 hour from cron) safe: each run only surfaces new failures.
 
 ## Troubleshooting
 
-- **`agent-triage validate` exits non-zero** — your rubric YAML has a
+- **`docket validate` exits non-zero** — your rubric YAML has a
   schema violation. The error message points to the field.
 - **`self-test` skips every mode** — the modes use deterministic
   detectors (`regex`, `tool_call`, `metric_threshold`); self-test only
@@ -326,7 +326,7 @@ hour from cron) safe: each run only surfaces new failures.
   GitHub Actions secrets; verify `ANTHROPIC_API_KEY`, `PHOENIX_URL`, and
   the tracker creds are set.
 - **Drafts look generic / repetitive** — the drafter prompt is in
-  `agent_triage/agent/subagents/drafter.py`. For project-specific
+  `docket/agent/subagents/drafter.py`. For project-specific
   framing, fork the prompt or extend the rubric's `description` block
   (which the drafter incorporates).
 
@@ -335,11 +335,11 @@ hour from cron) safe: each run only surfaces new failures.
 - Read [`docs/design.md`](design.md) — the architectural decisions and
   the phase plan.
 - Look at the built-in rubrics
-  (`agent_triage/rubric/builtin/*/v1/rubric.yaml`) as templates for your
+  (`docket/rubric/builtin/*/v1/rubric.yaml`) as templates for your
   own.
 - Schedule it once you trust the false-positive rate: either wire
-  `agent-triage run` into cron / GitHub Actions / Argo, or run the
-  built-in daemon — `agent-triage serve --interval 1h` with the same
+  `docket run` into cron / GitHub Actions / Argo, or run the
+  built-in daemon — `docket serve --interval 1h` with the same
   flags as `run`. The daemon tiles consecutive windows exactly (a failed
   tick retries its window instead of dropping it), which is the fiddly
   part of doing it with cron.

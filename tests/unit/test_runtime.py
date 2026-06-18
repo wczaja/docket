@@ -8,9 +8,9 @@ config + flags.
 
 import pytest
 
-from agent_triage.config import Config, MCPServerConfig
-from agent_triage.errors import ConfigError, TrackerError
-from agent_triage.runtime import build_backend, build_tracker
+from docket.config import Config, MCPServerConfig
+from docket.errors import ConfigError, TrackerError
+from docket.runtime import build_backend, build_tracker
 
 
 def test_build_backend_from_phoenix_url() -> None:
@@ -26,10 +26,10 @@ def test_build_backend_from_config() -> None:
     config = Config(
         trace_backend=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-phoenix",
+            command="docket-adapter-phoenix",
             env={"PHOENIX_URL": "http://config:6006"},
         ),
-        rubric="agent-triage.dev/builtin/agents/v1",
+        rubric="docket.dev/builtin/agents/v1",
     )
     backend = build_backend(backend_name=None, config=config)
     assert backend.__class__.__name__ == "PhoenixAdapter"
@@ -39,7 +39,7 @@ def test_build_backend_cli_url_overrides_config_env() -> None:
     config = Config(
         trace_backend=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-phoenix",
+            command="docket-adapter-phoenix",
             env={"PHOENIX_URL": "http://config:6006"},
         ),
         rubric="x",
@@ -74,14 +74,14 @@ def test_build_backend_langfuse_from_config() -> None:
     config = Config(
         trace_backend=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-langfuse",
+            command="docket-adapter-langfuse",
             env={
                 "LANGFUSE_HOST": "http://langfuse.test",
                 "LANGFUSE_PUBLIC_KEY": "pk",
                 "LANGFUSE_SECRET_KEY": "sk",
             },
         ),
-        rubric="agent-triage.dev/builtin/agents/v1",
+        rubric="docket.dev/builtin/agents/v1",
     )
     backend = build_backend(backend_name=None, config=config)
     assert backend.__class__.__name__ == "LangfuseAdapter"
@@ -105,14 +105,14 @@ def test_build_backend_langsmith_from_config() -> None:
     config = Config(
         trace_backend=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-langsmith",
+            command="docket-adapter-langsmith",
             env={
                 "LANGSMITH_API_KEY": "ls-test",
                 "LANGSMITH_ENDPOINT": "https://api.smith.langchain.test",
                 "LANGSMITH_PROJECT": "agents-v1",
             },
         ),
-        rubric="agent-triage.dev/builtin/agents/v1",
+        rubric="docket.dev/builtin/agents/v1",
     )
     backend = build_backend(backend_name=None, config=config)
     assert backend.__class__.__name__ == "LangsmithAdapter"
@@ -158,19 +158,19 @@ def test_build_tracker_jira_from_config() -> None:
     config = Config(
         trace_backend=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-phoenix",
+            command="docket-adapter-phoenix",
             env={"PHOENIX_URL": "http://test:6006"},
         ),
         tracker=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-jira",
+            command="docket-adapter-jira",
             env={
                 "JIRA_HOST": "https://jira.internal.example.com",
                 "JIRA_PROJECT": "AGT",
                 "JIRA_PAT": "pat-token",
             },
         ),
-        rubric="agent-triage.dev/builtin/agents/v1",
+        rubric="docket.dev/builtin/agents/v1",
     )
     tracker = build_tracker(tracker_name=None, config=config)
     assert tracker is not None
@@ -181,12 +181,12 @@ def test_build_tracker_cli_overrides_config_env() -> None:
     config = Config(
         trace_backend=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-phoenix",
+            command="docket-adapter-phoenix",
             env={"PHOENIX_URL": "http://test:6006"},
         ),
         tracker=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-jira",
+            command="docket-adapter-jira",
             env={
                 "JIRA_HOST": "https://example.atlassian.net",
                 "JIRA_PROJECT": "AGT",
@@ -273,18 +273,18 @@ def test_build_tracker_linear_from_config() -> None:
     config = Config(
         trace_backend=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-phoenix",
+            command="docket-adapter-phoenix",
             env={"PHOENIX_URL": "http://test:6006"},
         ),
         tracker=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-linear",
+            command="docket-adapter-linear",
             env={
                 "LINEAR_API_KEY": "ln-key",
                 "LINEAR_TEAM_ID": "team-uuid",
             },
         ),
-        rubric="agent-triage.dev/builtin/agents/v1",
+        rubric="docket.dev/builtin/agents/v1",
     )
     tracker = build_tracker(tracker_name=None, config=config)
     assert tracker is not None
@@ -326,19 +326,19 @@ def test_build_tracker_github_from_config() -> None:
     config = Config(
         trace_backend=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-phoenix",
+            command="docket-adapter-phoenix",
             env={"PHOENIX_URL": "http://test:6006"},
         ),
         tracker=MCPServerConfig(
             type="mcp",
-            command="agent-triage-adapter-github",
+            command="docket-adapter-github",
             env={
                 "GITHUB_TOKEN": "ghp_test",
                 "GITHUB_OWNER": "acme",
                 "GITHUB_REPO": "widgets",
             },
         ),
-        rubric="agent-triage.dev/builtin/agents/v1",
+        rubric="docket.dev/builtin/agents/v1",
     )
     tracker = build_tracker(tracker_name=None, config=config)
     assert tracker is not None

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_triage.rubric.loader import load_rubric
-from agent_triage.rubric.validator import validate_rubric_yaml
+from docket.rubric.loader import load_rubric
+from docket.rubric.validator import validate_rubric_yaml
 
 EXAMPLES_DIR = Path(__file__).resolve().parents[2] / "rubrics" / "examples"
 

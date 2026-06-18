@@ -13,5 +13,5 @@ repos:
           - pydantic>=2.5
           - types-PyYAML
           - types-jsonschema
-        args: [--strict, agent_triage]
+        args: [--strict, docket]
         pass_filenames: false
