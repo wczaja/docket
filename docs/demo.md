@@ -9,7 +9,7 @@ as you like.
 The demo uses **LangSmith** as the trace backend and **GitHub Issues** as the
 tracker (the combination the [end-to-end testing guide](e2e-testing.md) is
 built around). The driver script is [`scripts/demo.sh`](../scripts/demo.sh); it
-steps through four beats, one per ENTER press, so you can narrate (or cut)
+steps through three beats, one per ENTER press, so you can narrate (or cut)
 between them.
 
 > **Prefer a fully-local backend?** The demo uses LangSmith because it needs no
@@ -26,17 +26,17 @@ between them.
 | # | Beat | On screen | ~time |
 | - | ---- | --------- | ----- |
 | 1 | **Seed** | `ingest_acceptance_traces_langsmith.py` prints a 60-line `OK …` manifest; optional cut to the LangSmith project showing the traces | 0:06–0:18 |
-| 2 | **Triage (read-only)** | `docket run` streams progress (`listed 60 trace ids` → `classified 60/60` → `produced 5 clusters` → `drafted 5 issues`), then renders the **Frequency by mode** + **Clusters** report | 0:18–0:42 |
-| 3 | **Post to GitHub** | Same command `+ --tracker github --auto-post-threshold high` → cut to the repo's Issues tab: **4 issues** appear, labeled `docket`, `mode:*`, `rubric:agents-builtin@1.0.0` | 0:42–1:05 |
-| 4 | **Re-run = no-op** | Re-run the identical command → `## Tracker dedup` shows `action=skipped` on every row; zero new issues | 1:05–1:22 |
+| 2 | **Triage + post** | `docket run … --tracker github --auto-post-threshold high` streams progress (`classified 60/60` → `produced 5 clusters` → `drafted 5 issues`) and renders the **Frequency by mode** + **Clusters** report; then cut to the repo's Issues tab: **4 issues** appear, labeled `docket`, `mode:*`, `rubric:agents-builtin@1.0.0` | 0:18–0:55 |
+| 3 | **Re-run = no-op** | Re-run the identical command → `## Tracker dedup` shows `action=skipped` on every row; zero new issues | 0:55–1:12 |
 
 The numbers are deterministic: the fixture seeds five modes — `hallucination`
 (critical), `infinite-loop`, `premature-termination`, `unsafe-tool-call`
 (high), `refusal-leakage` (medium), eight traces each. With the built-in
 rubric's `min_cluster_size: 3` that yields **5 clusters / 5 drafts**.
-`--auto-post-threshold high` posts the **four** at high or critical severity
-and leaves `refusal-leakage` (medium) in the local queue — a one-line point
-about severity gating. (`bad-handoff` is in the rubric but unseeded, so it
+Triage is **read-only by default**; `--auto-post-threshold high` is the explicit
+opt-in, and even then severity gates what lands in the tracker — it posts the
+**four** clusters at high or critical severity and leaves `refusal-leakage`
+(medium) in the local queue. (`bad-handoff` is in the rubric but unseeded, so it
 shows zero positives.)
 
 ---
@@ -86,11 +86,11 @@ Phoenix / Langfuse and Jira / Linear, see the
 ./scripts/demo.sh
 ```
 
-Press ENTER to advance between the four beats. Overrides via env vars:
+Press ENTER to advance between the three beats. Overrides via env vars:
 `LANGSMITH_PROJECT`, `DOCKET_DEMO_RUBRIC`, `DOCKET_DEMO_CONCURRENCY` (default 8,
 to shorten the API wait), `DOCKET_DEMO_SINCE` (default `1h`).
 
-If the read-only run reports `Pulled 0 traces`, the `--since` window didn't
+If the triage run reports `Pulled 0 traces`, the `--since` window didn't
 overlap the ingest (or LangSmith is still indexing) — wait a few seconds and
 widen it: `DOCKET_DEMO_SINCE=24h ./scripts/demo.sh`.
 
@@ -109,11 +109,11 @@ widen it: `DOCKET_DEMO_SINCE=24h ./scripts/demo.sh`.
 
 Tips:
 
-- **Speed-ramp the waits.** Each `docket run` re-classifies 60 traces
-  (~15–30s of API calls). Cut or 3–6× the "thinking" stretches in the editor;
-  keep the table and issue reveals at full speed. That's how ~3 real minutes
-  becomes ~75s.
-- **The GitHub cut is the payoff.** After beat 3, switch to a pre-opened, empty
+- **Speed-ramp the waits.** Each of the two `docket run`s re-classifies 60
+  traces (~15–30s of API calls). Cut or 3–6× the "thinking" stretches in the
+  editor; keep the table and issue reveals at full speed. That's how a couple of
+  real minutes becomes ~75s.
+- **The GitHub cut is the payoff.** After beat 2, switch to a pre-opened, empty
   Issues tab and refresh on camera so the four issues pop in; hover one to show
   the labels.
 - **Design for muted autoplay.** Social video autoplays silent — lean on the

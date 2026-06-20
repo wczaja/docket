@@ -4,13 +4,14 @@
 #
 # Uses LangSmith as the trace backend (the project's primary e2e path) plus the
 # acceptance fixture and its LangSmith ingest script, so the run is
-# deterministic and reproducible. Four beats, one per ENTER press, paced for a
+# deterministic and reproducible. Three beats, one per ENTER press, paced for a
 # ~75s recording:
 #
 #   1. seed 60 synthetic traces (20 clean + 40 seeded failures) into LangSmith
-#   2. triage them read-only — classify, cluster, draft; nothing is posted
-#   3. add a GitHub tracker and auto-post clusters at 'high' severity or above
-#   4. re-run the identical command -> idempotent no-op (every cluster skipped)
+#   2. triage and post — classify, cluster, draft, then auto-post clusters at
+#      'high' severity or above to GitHub (read-only is the default; posting is
+#      an explicit opt-in)
+#   3. re-run the identical command -> idempotent no-op (every cluster skipped)
 #
 # Full walkthrough, recording, and posting notes: docs/demo.md
 #
@@ -75,21 +76,11 @@ python scripts/ingest_acceptance_traces_langsmith.py --project "$LANGSMITH_PROJE
 dim "# (LangSmith indexes asynchronously — give it a few seconds before triage.)"
 pause
 
-# ── 2. Triage, read-only ──────────────────────────────────────────────────────
-dim "# Triage the window: classify every trace, cluster the positives, draft"
-dim "# one issue per cluster. Read-only by default — nothing is posted yet."
-docket run \
-  --backend langsmith \
-  --langsmith-api-key "$LANGSMITH_API_KEY" \
-  --langsmith-project "$LANGSMITH_PROJECT" \
-  --rubric "$RUBRIC" \
-  --since "$SINCE" \
-  --concurrency "$CONCURRENCY"
-pause
-
-# ── 3. Post to the tracker ────────────────────────────────────────────────────
-dim "# Same run, now with a tracker. Auto-post clusters whose severity is"
-dim "# 'high' or above; everything below stays queued locally for review."
+# ── 2. Triage and post ────────────────────────────────────────────────────────
+dim "# One pass does it all: classify every trace, cluster the positives, draft"
+dim "# one issue per cluster, then post. Triage is read-only by default — here"
+dim "# we opt in with --auto-post-threshold high, so only high+critical clusters"
+dim "# post; lower-severity drafts stay in the local queue."
 docket run \
   --backend langsmith \
   --langsmith-api-key "$LANGSMITH_API_KEY" \
@@ -102,12 +93,12 @@ docket run \
   --since "$SINCE" \
   --concurrency "$CONCURRENCY" \
   --auto-post-threshold high
-dim "# -> 4 issues filed: hallucination (critical) + infinite-loop, unsafe-"
-dim "#    tool-call, premature-termination (high). refusal-leakage (medium)"
-dim "#    stays in the local queue. Switch to the repo's Issues tab now."
+dim "# -> 4 issues filed: hallucination (critical) + infinite-loop, unsafe-tool-"
+dim "#    call, premature-termination (high). refusal-leakage (medium) stays in"
+dim "#    the local queue. Switch to the repo's Issues tab now."
 pause
 
-# ── 4. Re-run = idempotent no-op ──────────────────────────────────────────────
+# ── 3. Re-run = idempotent no-op ──────────────────────────────────────────────
 dim "# Run the EXACT same command again. The run_id is a hash of the inputs,"
 dim "# and dedup keys off label + embedded provenance, so re-runs do nothing."
 docket run \
