@@ -5,10 +5,10 @@ Gated three ways:
   - `PHOENIX_URL` env var present
   - `ANTHROPIC_API_KEY` env var present (the llm_judge modes call out)
 
-Ingests the 20-trace acceptance fixture, runs triage end-to-end, and asserts
+Ingests the 60-trace acceptance fixture, runs triage end-to-end, and asserts
 the recall/precision numbers from design §7:
-  - recall  = 1.0  (all 10 seeded failures flagged)
-  - precision >= 0.9  (at most 1 false positive on the 10 clean traces)
+  - recall  = 1.0  (all 40 seeded failures flagged)
+  - precision >= 0.9  (at most 4 false positives on the 20 clean traces)
 """
 
 import asyncio

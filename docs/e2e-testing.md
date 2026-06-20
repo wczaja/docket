@@ -8,8 +8,8 @@ Jira / Linear (links throughout).
 
 By the end, you'll have:
 
-1. A LangSmith project populated with 20 synthetic traces (10 clean,
-   10 seeded with known failure modes).
+1. A LangSmith project populated with 60 synthetic traces (20 clean,
+   40 seeded with known failure modes).
 2. A GitHub repository that receives `docket`'s drafted issues.
 3. Verified the dedup loop is idempotent across re-runs.
 4. Verified the `--review` flow works end to end.
@@ -21,10 +21,10 @@ The whole thing takes ~15 minutes once you have the credentials.
 ## Do we need a trace simulator?
 
 **Yes — and one already ships with the project.**
-`docket._acceptance` produces 20 deterministic synthetic traces
-(10 clean, 10 with seeded failures across `hallucination`,
-`infinite-loop`, `refusal-leakage`, `unsafe-tool-call`,
-`premature-termination`). Two posting scripts then push these into a
+`docket._acceptance` produces 60 deterministic synthetic traces
+(20 clean, 40 with seeded failures — 8 each across `hallucination`,
+`infinite-loop`, `premature-termination`, `unsafe-tool-call`,
+`refusal-leakage`). Two posting scripts then push these into a
 real observability backend:
 
 | Backend     | Script                                                |
@@ -118,7 +118,7 @@ export LANGSMITH_PROJECT="docket-e2e"
 ## 3. Seed the project with synthetic traces
 
 Use the LangSmith ingest script that ships with the project. It posts
-20 synthetic traces into the project you just created:
+60 synthetic traces into the project you just created:
 
 ```bash
 python scripts/ingest_acceptance_traces_langsmith.py \
@@ -128,19 +128,21 @@ python scripts/ingest_acceptance_traces_langsmith.py \
 Expected output:
 
 ```
-acceptance summary: {"total": 20, "clean": 10, "infinite_loop": 2, ...}
+acceptance summary: {"total": 60, "clean": 20, "seeded_failures": 40, "modes_seeded": ["hallucination", "infinite-loop", "premature-termination", "refusal-leakage", "unsafe-tool-call"]}
 
-OK    clean-00        expected=clean                     trace_id=...
-OK    clean-01        expected=clean                     trace_id=...
-OK    fail-loop-00    expected=infinite-loop             trace_id=...
-OK    fail-hallu-00   expected=hallucination             trace_id=...
+OK    clean-0         expected=clean                     trace_id=...
+OK    leak-0          expected=refusal-leakage           trace_id=...
+OK    unsafe-0        expected=unsafe-tool-call          trace_id=...
+OK    loop-0          expected=infinite-loop             trace_id=...
+OK    halluc-0        expected=hallucination             trace_id=...
+OK    prem-0          expected=premature-termination     trace_id=...
 ...
-Ingested 20 traces.
+Ingested 60 traces.
 ```
 
-Refresh the LangSmith UI — the project should now show 20 root runs.
-Click into one of the `fail-...` traces; the run tree should match
-what the script printed.
+Refresh the LangSmith UI — the project should now show 60 root runs.
+Click into one of the seeded-failure traces (e.g. `loop-0` or
+`halluc-0`); the run tree should match what the script printed.
 
 ---
 
@@ -218,9 +220,9 @@ docket run \
 You'll see output similar to:
 
 ```
-Pulled 20 traces from langsmith
-Classifying 20 traces against agents-builtin v1.0.0 ...
-  classified 20/20
+Pulled 60 traces from langsmith
+Classifying 60 traces against agents-builtin v1.0.0 ...
+  classified 60/60
 Clustering ...
   formed 5 clusters across 5 modes
 Drafting ...
@@ -229,17 +231,17 @@ Report:
 # docket run `<run-id>`
 - Rubric: agents-builtin v1.0.0
 - Window: ...
-- Traces processed: 20
+- Traces processed: 60
 ...
 ```
 
 ### What to verify
 
-- **Trace count**: `20` (matches the fixture).
+- **Trace count**: `60` (matches the fixture).
 - **Mode hits**: the report's "Frequency by mode" table should show
   positive counts for `hallucination`, `infinite-loop`,
   `refusal-leakage`, `unsafe-tool-call`, `premature-termination`,
-  with 2 positives per mode on the 20-trace fixture.
+  with 8 positives per seeded mode on the 60-trace fixture.
 - **Cluster count**: usually 5 (one per seeded mode), depending on
   the embedding-clusterer's threshold.
 - **Queue**: `ls ~/.docket/queued-issues/<run-id>/` should
@@ -473,7 +475,7 @@ docket run \
   --agent
 ```
 
-You don't need a fresh trace ingest — re-using the 20 synthetic
+You don't need a fresh trace ingest — re-using the 60 synthetic
 traces from section 3 is exactly the point.
 
 ### 12.2 What you'll see
@@ -486,15 +488,15 @@ A truncated example:
 I'll run the full workflow. Starting with list_traces.
 
 → list_traces({"since": "...", "until": "..."})
-← list_traces returned 20 trace IDs. Stored on agent state.
+← list_traces returned 60 trace IDs. Stored on agent state.
 
 → classify_traces({})
-← classify_traces ran every mode against every trace. 10/20 traces had
+← classify_traces ran every mode against every trace. 40/60 traces had
   at least one positive classification.
 
 → cluster_classifications({})
 ← cluster_classifications grouped positives by embedding similarity per
-  mode. 5 clusters across 5 modes (sizes: 2, 2, 2, 2, 2).
+  mode. 5 clusters across 5 modes (sizes: 8, 8, 8, 8, 6).
 
 → draft_issues_tool({})
 ← draft_issues_tool generated 5 drafts and queued them to
@@ -584,8 +586,8 @@ A CLI flag for this is a v1.1 follow-up.
   because an earlier tool returned an unexpected status. The
   fallback string is `"(deep agent run produced no /report.md)"`.
 - **Higher API bill than expected**: planning adds LLM calls on top
-  of detector calls. For the 20-trace fixture, expect ~5-10 planning
-  calls plus the 40 detector calls. Throttle with `--concurrency 2`
+  of detector calls. For the 60-trace fixture, expect ~5-10 planning
+  calls plus the 120 detector calls. Throttle with `--concurrency 2`
   if needed.
 - **`--tracker` or `--review` quietly do nothing**: the agent
   workflow ends at `write_report` in v1.0. Drafts queue locally but
@@ -641,10 +643,12 @@ tokens, confirm the `repo` scope is set.
 
 ### Clusters look noisy (size 1, lots of one-off issues)
 
-The synthetic fixture has only 2 positives per mode, which is right
-at the `min_cluster_size: 3` boundary in the built-in rubric. Either:
+The 60-trace fixture seeds 8 positives per mode — comfortably above the
+`min_cluster_size: 3` in the built-in rubric — so the synthetic run
+should cluster cleanly. You're more likely to hit this with a sparse
+real window that has only one or two positives for a mode. In that case:
 
-- Run the ingest script twice (doubles every mode to 4 positives).
+- Widen the time window so more positives land in the same run.
 - Edit your rubric copy's `clustering.min_cluster_size` down to 2.
 
 This matters less with real production traces, where you typically
@@ -653,8 +657,8 @@ have many positives per mode in a given window.
 ### LLM bills
 
 LLM-judge detectors call the provider once per `(trace, mode)` pair.
-20 traces × 2 judge modes = 40 calls per run. The default Haiku
-model keeps costs to ~$0.01 per run. For batch development, throttle
+60 traces × 2 judge modes = 120 calls per run. The default Haiku
+model keeps costs to a few cents per run. For batch development, throttle
 with `--concurrency 2` to avoid burst spikes.
 
 ---

@@ -7,7 +7,7 @@ Usage::
         python scripts/ingest_acceptance_traces_langsmith.py \\
         --project docket-e2e
 
-Posts the 20-trace fixture (10 clean + 10 seeded failures) from
+Posts the 60-trace fixture (20 clean + 40 seeded failures) from
 `docket._acceptance` to LangSmith's batch runs endpoint at
 `/api/v1/runs/batch`. Prints a one-line manifest per trace plus a summary.
 
