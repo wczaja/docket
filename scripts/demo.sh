@@ -4,14 +4,16 @@
 #
 # Uses LangSmith as the trace backend (the project's primary e2e path) plus the
 # acceptance fixture and its LangSmith ingest script, so the run is
-# deterministic and reproducible. Three beats, one per ENTER press, paced for a
-# ~75s recording:
+# deterministic and reproducible. Two beats, one per ENTER press, paced for a
+# ~60s social clip:
 #
 #   1. seed 60 synthetic traces (20 clean + 40 seeded failures) into LangSmith
 #   2. triage and post — classify, cluster, draft, then auto-post clusters at
 #      'high' severity or above to GitHub (read-only is the default; posting is
 #      an explicit opt-in)
-#   3. re-run the identical command -> idempotent no-op (every cluster skipped)
+#
+# Optional third beat — an idempotent re-run (every cluster skipped) — is off by
+# default; set DOCKET_DEMO_RERUN=1 to include it in a longer / docs cut.
 #
 # Full walkthrough, recording, and posting notes: docs/demo.md
 #
@@ -23,8 +25,8 @@
 #   - OPENAI_API_KEY               clustering embeddings
 #   - GITHUB_TOKEN / GITHUB_OWNER / GITHUB_REPO   a throwaway repo for drafts
 #
-# Optional overrides (env): DOCKET_DEMO_RUBRIC, DOCKET_DEMO_CONCURRENCY,
-# DOCKET_DEMO_SINCE, LANGSMITH_PROJECT.
+# Optional overrides (env): DOCKET_DEMO_RERUN (include the idempotency beat),
+# DOCKET_DEMO_RUBRIC, DOCKET_DEMO_CONCURRENCY, DOCKET_DEMO_SINCE, LANGSMITH_PROJECT.
 #
 set -euo pipefail
 
@@ -96,9 +98,20 @@ docket run \
 dim "# -> 4 issues filed: hallucination (critical) + infinite-loop, unsafe-tool-"
 dim "#    call, premature-termination (high). refusal-leakage (medium) stays in"
 dim "#    the local queue. Switch to the repo's Issues tab now."
+
+# That's the core demo: 60 traces in, 4 triaged issues out. The idempotency
+# re-run below is an optional beat for longer / docs cuts (off by default — a
+# "nothing happens" no-op is a weak closer for a social clip). Enable with
+# DOCKET_DEMO_RERUN=1; otherwise the idempotency claim is better made in the
+# post text.
+if [ "${DOCKET_DEMO_RERUN:-0}" = "0" ]; then
+  echo
+  bold "From 60 traces: 5 failure clusters surfaced, 4 issues filed and labeled."
+  exit 0
+fi
 pause
 
-# ── 3. Re-run = idempotent no-op ──────────────────────────────────────────────
+# ── 3. Re-run = idempotent no-op (optional) ───────────────────────────────────
 dim "# Run the EXACT same command again. The run_id is a hash of the inputs,"
 dim "# and dedup keys off label + embedded provenance, so re-runs do nothing."
 docket run \

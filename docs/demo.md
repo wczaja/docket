@@ -9,7 +9,7 @@ as you like.
 The demo uses **LangSmith** as the trace backend and **GitHub Issues** as the
 tracker (the combination the [end-to-end testing guide](e2e-testing.md) is
 built around). The driver script is [`scripts/demo.sh`](../scripts/demo.sh); it
-steps through three beats, one per ENTER press, so you can narrate (or cut)
+steps through two beats, one per ENTER press, so you can narrate (or cut)
 between them.
 
 > **Prefer a fully-local backend?** The demo uses LangSmith because it needs no
@@ -27,7 +27,12 @@ between them.
 | - | ---- | --------- | ----- |
 | 1 | **Seed** | `ingest_acceptance_traces_langsmith.py` prints a 60-line `OK …` manifest; optional cut to the LangSmith project showing the traces | 0:06–0:18 |
 | 2 | **Triage + post** | `docket run … --tracker github --auto-post-threshold high` streams progress (`classified 60/60` → `produced 5 clusters` → `drafted 5 issues`) and renders the **Frequency by mode** + **Clusters** report; then cut to the repo's Issues tab: **4 issues** appear, labeled `docket`, `mode:*`, `rubric:agents-builtin@1.0.0` | 0:18–0:55 |
-| 3 | **Re-run = no-op** | Re-run the identical command → `## Tracker dedup` shows `action=skipped` on every row; zero new issues | 0:55–1:12 |
+
+End on the payoff (~55s). *Optional beat 3 — re-run the identical command to show
+idempotent dedup (`## Tracker dedup` all `action=skipped`, zero new issues). Off
+by default (`DOCKET_DEMO_RERUN=1` to include it): a "nothing happens" no-op is a
+weak closer for a social clip, and the idempotency point lands better as a line
+in the post (see [Posting](#posting)). Keep it for a longer or docs cut.*
 
 The numbers are deterministic: the fixture seeds five modes — `hallucination`
 (critical), `infinite-loop`, `premature-termination`, `unsafe-tool-call`
@@ -86,9 +91,10 @@ Phoenix / Langfuse and Jira / Linear, see the
 ./scripts/demo.sh
 ```
 
-Press ENTER to advance between the three beats. Overrides via env vars:
-`LANGSMITH_PROJECT`, `DOCKET_DEMO_RUBRIC`, `DOCKET_DEMO_CONCURRENCY` (default 8,
-to shorten the API wait), `DOCKET_DEMO_SINCE` (default `1h`).
+Press ENTER to advance between the two beats. Overrides via env vars:
+`DOCKET_DEMO_RERUN=1` (add the optional idempotency beat), `LANGSMITH_PROJECT`,
+`DOCKET_DEMO_RUBRIC`, `DOCKET_DEMO_CONCURRENCY` (default 8, to shorten the API
+wait), `DOCKET_DEMO_SINCE` (default `1h`).
 
 If the triage run reports `Pulled 0 traces`, the `--since` window didn't
 overlap the ingest (or LangSmith is still indexing) — wait a few seconds and
@@ -109,10 +115,10 @@ widen it: `DOCKET_DEMO_SINCE=24h ./scripts/demo.sh`.
 
 Tips:
 
-- **Speed-ramp the waits.** Each of the two `docket run`s re-classifies 60
-  traces (~15–30s of API calls). Cut or 3–6× the "thinking" stretches in the
-  editor; keep the table and issue reveals at full speed. That's how a couple of
-  real minutes becomes ~75s.
+- **Speed-ramp the waits.** The triage run re-classifies 60 traces (~15–30s of
+  API calls; the optional re-run adds another). Cut or 3–6× the "thinking"
+  stretches in the editor; keep the table and issue reveals at full speed.
+  That's how a minute-plus of real time becomes ~50s.
 - **The GitHub cut is the payoff.** After beat 2, switch to a pre-opened, empty
   Issues tab and refresh on camera so the four issues pop in; hover one to show
   the labels.
@@ -124,7 +130,13 @@ Tips:
 
 ## Posting
 
-- Target ~75 seconds; hard cap 2:00. Shorter over-performs.
+- Target ~60 seconds; hard cap 2:00. Shorter over-performs.
+- **Pre-empt the obvious objection.** "Won't an auto-filing agent spam my
+  tracker?" Answer it in the post or a pinned comment: re-runs are idempotent —
+  docket dedups by labels + embedded provenance, so the same window posts
+  nothing twice (safe on a cron). That one line does the job the cut beat-3
+  re-run would have; show it on camera only for a longer cut
+  (`DOCKET_DEMO_RERUN=1`).
 - **Reddit:** upload the mp4 *natively* to the subreddit (native video
   outreaches an external link). Fits: r/LLMOps, r/MachineLearning weekend
   threads, r/Python, r/devops. Lead with the problem, not the tool.
