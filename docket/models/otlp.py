@@ -101,7 +101,7 @@ def to_otlp_protobuf(trace: OpenInferenceTrace) -> bytes:
                 if span.get("parentSpanId"):
                     span["parentSpanId"] = _hex_to_base64(span["parentSpanId"])
     request = json_format.ParseDict(payload, ExportTraceServiceRequest())
-    return request.SerializeToString()
+    return cast(bytes, request.SerializeToString())
 
 
 def _hex_to_base64(hex_id: str) -> str:

@@ -135,7 +135,7 @@ module = ["jsonschema.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["sklearn.*", "deepagents.*", "openinference.*", "phoenix.*"]
+module = ["sklearn.*", "deepagents.*", "openinference.*", "phoenix.*", "google.protobuf.*", "opentelemetry.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

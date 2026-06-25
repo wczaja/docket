@@ -281,5 +281,5 @@ def test_to_otlp_protobuf_rejects_non_hex_ids() -> None:
         ],
     )
     # OTLP ids are bytes on the wire; non-hex ids cannot be encoded.
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="non-hexadecimal"):
         to_otlp_protobuf(trace)
