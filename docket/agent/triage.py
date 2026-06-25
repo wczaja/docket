@@ -254,25 +254,53 @@ async def run_triage_pipeline(
                 "in docket.yaml. Refusing to run."
             )
 
-    # 2. Fetch and classify (concurrency from --concurrency).
+    # 2. Fetch and classify (concurrency from --concurrency). Fetches run
+    # concurrently under the same bound as classification; with sequential
+    # fetching, backend round-trip latency dominates the run once a window
+    # lists hundreds of traces.
     classifier = Classifier(llm_provider, batch_size=batch_size, concurrency=concurrency)
-    traces: list[tuple[str, OpenInferenceTrace]] = []
     fetch_step = max(1, len(trace_ids) // 10) if trace_ids else 1
     fetch_errors: list[tuple[str, str]] = []
-    for idx, tid in enumerate(trace_ids, start=1):
-        try:
-            traces.append((tid, await backend.get_trace(tid)))
-        except Exception as e:  # noqa: BLE001 -- adapter errors vary by backend
-            reason = redact(str(e))
-            fetch_errors.append((tid, reason))
-            log.warning("skipping trace %s after fetch failure: %s", tid, reason)
-        if idx == 1 or idx == len(trace_ids) or idx % fetch_step == 0:
+    fetched: dict[str, OpenInferenceTrace] = {}
+    fetch_sem = asyncio.Semaphore(concurrency)
+    fetch_done = 0
+    fetch_lock = asyncio.Lock()
+
+    async def _fetch_one(tid: str) -> None:
+        nonlocal fetch_done
+        async with fetch_sem:
+            try:
+                fetched[tid] = await backend.get_trace(tid)
+            except Exception as e:  # noqa: BLE001 -- adapter errors vary by backend
+                reason = redact(str(e))
+                fetch_errors.append((tid, reason))
+                log.warning("skipping trace %s after fetch failure: %s", tid, reason)
+        async with fetch_lock:
+            fetch_done += 1
+            completed = fetch_done
+        if completed == 1 or completed == len(trace_ids) or completed % fetch_step == 0:
             log.info(
                 "fetched %d/%d traces (skipped: %d)",
-                len(traces),
+                len(fetched),
                 len(trace_ids),
                 len(fetch_errors),
             )
+
+    # return_exceptions=True so an unexpected (non-backend) failure in one
+    # fetch doesn't abandon in-flight siblings mid-await; backend errors are
+    # already caught per-trace, so only a BaseException would surface here.
+    fetch_outcomes = await asyncio.gather(
+        *(_fetch_one(tid) for tid in trace_ids),
+        return_exceptions=True,
+    )
+    for outcome in fetch_outcomes:
+        if isinstance(outcome, BaseException):
+            raise outcome
+    # Rebuild in listing order so downstream output stays deterministic
+    # regardless of fetch completion order.
+    traces: list[tuple[str, OpenInferenceTrace]] = [
+        (tid, fetched[tid]) for tid in trace_ids if tid in fetched
+    ]
     if fetch_errors:
         log.warning(
             "fetch phase completed with %d/%d traces skipped due to backend errors",
@@ -301,10 +329,13 @@ async def run_triage_pipeline(
     positive_count = sum(1 for c in all_classifications if c.error is None and c.positive)
     error_count = sum(1 for c in all_classifications if c.error is not None)
     log.info(
-        "classification complete: %d positive, %d negative, %d errors",
+        "classification complete: %d positive, %d negative, %d errors "
+        "(%d trace×mode classifications across %d traces)",
         positive_count,
         len(all_classifications) - positive_count - error_count,
         error_count,
+        len(all_classifications),
+        len(traces),
     )
 
     # 3. Annotate.

@@ -46,13 +46,38 @@ def render_report(
 
     lines.append("## Frequency by mode")
     lines.append("")
-    lines.append("| mode | severity | positive | negative | error |")
-    lines.append("| --- | --- | ---: | ---: | ---: |")
-    for ms in run_report.mode_stats:
-        lines.append(
-            f"| `{ms.mode_id}` | {ms.severity} | {ms.positive_count} | "
-            f"{ms.negative_count} | {ms.error_count} |"
-        )
+    # Pad cells to a common width per column. The result is still valid
+    # GitHub-flavored markdown (renders identically) but also aligns when the
+    # report is read as raw text — e.g. echoed to a terminal by `docket run`.
+    headers = ["mode", "severity", "positive", "negative", "error"]
+    right_aligned = {"positive", "negative", "error"}
+    rows = [
+        [
+            f"`{ms.mode_id}`",
+            str(ms.severity),
+            str(ms.positive_count),
+            str(ms.negative_count),
+            str(ms.error_count),
+        ]
+        for ms in run_report.mode_stats
+    ]
+    widths = [max([len(headers[i]), *(len(row[i]) for row in rows)]) for i in range(len(headers))]
+
+    def _row(cells: list[str]) -> str:
+        padded = [
+            cell.rjust(widths[i]) if headers[i] in right_aligned else cell.ljust(widths[i])
+            for i, cell in enumerate(cells)
+        ]
+        return "| " + " | ".join(padded) + " |"
+
+    sep = [
+        ("-" * (widths[i] - 1) + ":") if headers[i] in right_aligned else "-" * widths[i]
+        for i in range(len(headers))
+    ]
+    lines.append(_row(headers))
+    lines.append("| " + " | ".join(sep) + " |")
+    for row in rows:
+        lines.append(_row(row))
     lines.append("")
 
     if clusters:
