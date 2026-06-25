@@ -217,3 +217,69 @@ def test_none_attribute_round_trips() -> None:
     assert attr == {"key": "maybe", "value": {}}
     # And decoding again still yields None, not the string "None".
     assert from_otlp(re_encoded).spans[0].attributes["maybe"] is None
+
+
+def test_to_otlp_protobuf_serializes_ids_and_attributes() -> None:
+    pytest.importorskip(
+        "opentelemetry.proto.collector.trace.v1.trace_service_pb2",
+        reason="opentelemetry-proto required for OTLP protobuf export",
+    )
+    from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
+        ExportTraceServiceRequest,
+    )
+
+    from docket.models.otlp import to_otlp_protobuf
+    from docket.models.trace import OpenInferenceTrace, Span
+
+    trace_id = "0123456789abcdef0123456789abcdef"  # 16 bytes
+    span_id = "fedcba9876543210"  # 8 bytes
+    trace = OpenInferenceTrace(
+        trace_id=trace_id,
+        spans=[
+            Span(
+                span_id=span_id,
+                trace_id=trace_id,
+                name="completion",
+                start_time_unix_nano=1,
+                end_time_unix_nano=2,
+                attributes={
+                    "openinference.span.kind": "LLM",
+                    "llm.token_count.total": 30,
+                },
+            )
+        ],
+    )
+
+    request = ExportTraceServiceRequest()
+    request.ParseFromString(to_otlp_protobuf(trace))
+
+    # ids land as the raw bytes the wire format requires, not the hex string ...
+    span = request.resource_spans[0].scope_spans[0].spans[0]
+    assert span.trace_id == bytes.fromhex(trace_id)
+    assert span.span_id == bytes.fromhex(span_id)
+    # ... and typed attributes survive the JSON->protobuf conversion.
+    attrs = {kv.key: kv.value for kv in span.attributes}
+    assert attrs["openinference.span.kind"].string_value == "LLM"
+    assert attrs["llm.token_count.total"].int_value == 30
+
+
+def test_to_otlp_protobuf_rejects_non_hex_ids() -> None:
+    pytest.importorskip("opentelemetry.proto.collector.trace.v1.trace_service_pb2")
+    from docket.models.otlp import to_otlp_protobuf
+    from docket.models.trace import OpenInferenceTrace, Span
+
+    trace = OpenInferenceTrace(
+        trace_id="not-hex",
+        spans=[
+            Span(
+                span_id="also-not-hex",
+                trace_id="not-hex",
+                name="x",
+                start_time_unix_nano=1,
+                end_time_unix_nano=2,
+            )
+        ],
+    )
+    # OTLP ids are bytes on the wire; non-hex ids cannot be encoded.
+    with pytest.raises(ValueError, match="non-hexadecimal"):
+        to_otlp_protobuf(trace)

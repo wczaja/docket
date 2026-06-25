@@ -135,8 +135,18 @@ module = ["jsonschema.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["sklearn.*", "deepagents.*", "openinference.*", "phoenix.*"]
+module = ["sklearn.*", "deepagents.*", "openinference.*", "phoenix.*", "google.protobuf.*", "opentelemetry.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# numpy 2.5+ ships PEP 695 `type` aliases in its stubs (3.12+ syntax); with
+# python_version pinned to 3.11, mypy can't parse them on the 3.12/3.13 runners
+# (the 3.11 runner resolves an older numpy and is unaffected). docket touches
+# numpy only in clusterer._hdbscan_labels, feeding sklearn (already untyped
+# here), so skipping its stubs costs no real coverage.
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

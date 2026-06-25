@@ -10,6 +10,7 @@ OTLP encodes int64 attribute values as JSON strings (the wire format avoids
 loss of precision); we decode to `int` and re-encode as string on output.
 """
 
+import base64
 from typing import Any, cast
 
 from docket.errors import BackendError
@@ -73,6 +74,39 @@ def to_otlp(trace: OpenInferenceTrace) -> dict[str, Any]:
             }
         ]
     }
+
+
+def to_otlp_protobuf(trace: OpenInferenceTrace) -> bytes:
+    """Serialize a trace to an OTLP/protobuf ``ExportTraceServiceRequest``.
+
+    OTLP/HTTP collectors — Phoenix's ``/v1/traces`` among them — accept
+    protobuf (``application/x-protobuf``), not JSON. Trace and span ids must be
+    valid hex (16-byte trace, 8-byte span); they are decoded to the raw bytes
+    the wire format requires. Needs ``opentelemetry-proto`` + ``protobuf``,
+    which ship transitively with ``arize-phoenix-otel`` (a core dependency).
+    """
+    # Imported lazily: the protobuf stack is only needed for wire export, not
+    # for the JSON round-trip the rest of this module does.
+    from google.protobuf import json_format
+    from opentelemetry.proto.collector.trace.v1.trace_service_pb2 import (
+        ExportTraceServiceRequest,
+    )
+
+    payload = to_otlp(trace)
+    for resource_spans in payload["resourceSpans"]:
+        for scope_spans in resource_spans["scopeSpans"]:
+            for span in scope_spans["spans"]:
+                span["traceId"] = _hex_to_base64(span["traceId"])
+                span["spanId"] = _hex_to_base64(span["spanId"])
+                if span.get("parentSpanId"):
+                    span["parentSpanId"] = _hex_to_base64(span["parentSpanId"])
+    request = json_format.ParseDict(payload, ExportTraceServiceRequest())
+    return cast(bytes, request.SerializeToString())
+
+
+def _hex_to_base64(hex_id: str) -> str:
+    """Re-encode a hex id as base64 for OTLP/JSON ``bytes``-field parsing."""
+    return base64.b64encode(bytes.fromhex(hex_id)).decode("ascii")
 
 
 def _decode_span(s: dict[str, Any]) -> Span:

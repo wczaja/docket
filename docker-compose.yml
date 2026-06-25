@@ -10,10 +10,18 @@ services:
     volumes:
       - phoenix-data:/mnt/phoenix
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:6006"]
+      # The Phoenix image ships no wget/curl, so shelling out to them leaves the
+      # container permanently "unhealthy" even while it serves fine. Use the
+      # bundled Python interpreter (the image's entrypoint) instead.
+      test:
+        - CMD
+        - python3
+        - -c
+        - import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:6006', timeout=3).status < 500 else 1)
       interval: 5s
-      timeout: 3s
-      retries: 20
+      timeout: 5s
+      retries: 30
+      start_period: 20s
 
   langfuse-db:
     image: postgres:16-alpine

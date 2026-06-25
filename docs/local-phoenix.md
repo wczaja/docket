@@ -17,9 +17,10 @@ Wait until `docker compose ps` reports `phoenix` as healthy, or check the UI.
 python scripts/ingest_acceptance_traces.py --phoenix-url http://localhost:6006
 ```
 
-This posts 20 synthetic traces (10 clean + 10 with seeded failures across
-five of the `agents/v1` modes). The script prints a one-line manifest per
-trace plus a summary.
+This posts 60 synthetic traces (20 clean + 40 with seeded failures, 8 each
+across five of the `agents/v1` modes) to Phoenix's OTLP endpoint as protobuf
+(`application/x-protobuf`, the only OTLP encoding current Phoenix builds
+accept). The script prints a one-line manifest per trace plus a summary.
 
 ## 3. Run triage against Phoenix
 

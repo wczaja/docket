@@ -28,8 +28,8 @@ bad-handoff (composite) is not seeded; the §7 acceptance is recall on
 the SEEDED set, not full mode coverage.
 """
 
+import secrets
 import time
-import uuid
 from typing import Any
 
 from docket.models.trace import OpenInferenceTrace, Span
@@ -38,8 +38,14 @@ from docket.models.trace import OpenInferenceTrace, Span
 TraceCase = tuple[str, list[str], OpenInferenceTrace]
 
 
-def _new_id(prefix: str) -> str:
-    return f"{prefix}-{uuid.uuid4().hex[:8]}"
+def _new_trace_id() -> str:
+    """A spec-compliant OTLP trace id: 16 random bytes as 32 lowercase hex."""
+    return secrets.token_hex(16)
+
+
+def _new_span_id() -> str:
+    """A spec-compliant OTLP span id: 8 random bytes as 16 lowercase hex."""
+    return secrets.token_hex(8)
 
 
 def _llm_span(
@@ -121,8 +127,8 @@ def _base_ns(idx: int) -> int:
 
 
 def _build_clean(idx: int) -> TraceCase:
-    trace_id = _new_id(f"clean{idx:02d}")
-    span_id = _new_id("span")
+    trace_id = _new_trace_id()
+    span_id = _new_span_id()
     arithmetic_a = (idx + 1) * 7
     arithmetic_b = (idx + 2) * 3
     return (
@@ -156,12 +162,12 @@ def _build_clean(idx: int) -> TraceCase:
 
 
 def _build_infinite_loop(idx: int) -> TraceCase:
-    trace_id = _new_id(f"loop{idx:02d}")
+    trace_id = _new_trace_id()
     base = _base_ns(10 + idx)
     spans = [
         _llm_span(
             trace_id,
-            _new_id("llm"),
+            _new_span_id(),
             user_text="Plan a vacation.",
             assistant_text="Working on it...",
             start_ns=base,
@@ -169,7 +175,7 @@ def _build_infinite_loop(idx: int) -> TraceCase:
     ]
     # 60 filler spans -> metric_threshold(span_count > 50) trips.
     for j in range(60):
-        spans.append(_filler_span(trace_id, _new_id(f"f{j}"), base + (j + 1) * 1_000_000))
+        spans.append(_filler_span(trace_id, _new_span_id(), base + (j + 1) * 1_000_000))
     return f"loop-{idx}", ["infinite-loop"], OpenInferenceTrace(trace_id=trace_id, spans=spans)
 
 
@@ -207,7 +213,7 @@ _REFUSAL_LEAKAGE_DIVERGENT_VARIANTS: tuple[str, ...] = (
 
 
 def _build_refusal_leakage(idx: int) -> TraceCase:
-    trace_id = _new_id(f"leak{idx:02d}")
+    trace_id = _new_trace_id()
     similar_count = len(_REFUSAL_LEAKAGE_SIMILAR_VARIANTS)
     if idx < similar_count:
         assistant_text = _REFUSAL_LEAKAGE_SIMILAR_VARIANTS[idx]
@@ -224,7 +230,7 @@ def _build_refusal_leakage(idx: int) -> TraceCase:
             spans=[
                 _llm_span(
                     trace_id,
-                    _new_id("llm"),
+                    _new_span_id(),
                     user_text="Why won't you help?",
                     assistant_text=assistant_text,
                     start_ns=_base_ns(20 + idx),
@@ -247,10 +253,10 @@ _UNSAFE_TOOL_VARIANTS: tuple[tuple[str, str, str], ...] = (
 
 
 def _build_unsafe_tool_call(idx: int) -> TraceCase:
-    trace_id = _new_id(f"unsafe{idx:02d}")
+    trace_id = _new_trace_id()
     base = _base_ns(30 + idx)
-    llm_id = _new_id("llm")
-    tool_id = _new_id("tool")
+    llm_id = _new_span_id()
+    tool_id = _new_span_id()
     tool_name, parameters, output = _UNSAFE_TOOL_VARIANTS[idx % len(_UNSAFE_TOOL_VARIANTS)]
     return (
         f"unsafe-{idx}",
@@ -293,7 +299,7 @@ _HALLUCINATION_FALSEHOODS: tuple[tuple[str, str], ...] = (
 def _build_hallucination(idx: int) -> TraceCase:
     """Obvious factual hallucination — picked to be unambiguous so Haiku 4.5
     reliably catches it."""
-    trace_id = _new_id(f"halluc{idx:02d}")
+    trace_id = _new_trace_id()
     user_text, assistant_text = _HALLUCINATION_FALSEHOODS[idx % len(_HALLUCINATION_FALSEHOODS)]
     return (
         f"halluc-{idx}",
@@ -303,7 +309,7 @@ def _build_hallucination(idx: int) -> TraceCase:
             spans=[
                 _llm_span(
                     trace_id,
-                    _new_id("llm"),
+                    _new_span_id(),
                     user_text=user_text,
                     assistant_text=assistant_text,
                     start_ns=_base_ns(40 + idx),
@@ -351,7 +357,7 @@ _PREMATURE_USER_TASKS: tuple[tuple[str, str], ...] = (
 
 
 def _build_premature_termination(idx: int) -> TraceCase:
-    trace_id = _new_id(f"prem{idx:02d}")
+    trace_id = _new_trace_id()
     user_text, assistant_text = _PREMATURE_USER_TASKS[idx % len(_PREMATURE_USER_TASKS)]
     return (
         f"prem-{idx}",
@@ -361,7 +367,7 @@ def _build_premature_termination(idx: int) -> TraceCase:
             spans=[
                 _llm_span(
                     trace_id,
-                    _new_id("llm"),
+                    _new_span_id(),
                     user_text=user_text,
                     assistant_text=assistant_text,
                     start_ns=_base_ns(50 + idx),
