@@ -175,6 +175,6 @@ def test_load_rejects_rubric_importing_broken_llm_judge(tmp_path: Path) -> None:
 
 
 def test_load_all_builtin_rubrics_pass_semantic_validation() -> None:
-    for name in ("agents", "rag", "routing", "multi-agent"):
+    for name in ("agents", "rag", "routing", "multi-agent", "mast"):
         rubric = load_rubric(f"docket.dev/builtin/{name}/v1")
         assert rubric.modes

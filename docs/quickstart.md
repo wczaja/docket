@@ -131,6 +131,7 @@ Pick a built-in:
 --rubric docket.dev/builtin/rag/v1         # retrieval failures
 --rubric docket.dev/builtin/routing/v1     # router / supervisor
 --rubric docket.dev/builtin/multi-agent/v1 # multi-agent coordination
+--rubric docket.dev/builtin/mast/v1        # MAST taxonomy (7 modes)
 ```
 
 Or point at your own YAML (compose by `imports:` at the top — see

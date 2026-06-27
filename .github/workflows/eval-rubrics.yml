@@ -42,7 +42,7 @@ jobs:
       - name: Validate builtin rubrics
         run: |
           set -euo pipefail
-          for name in agents rag routing multi-agent; do
+          for name in agents rag routing multi-agent mast; do
             docket validate "docket.dev/builtin/${name}/v1"
           done
       - name: Validate example rubrics
@@ -70,7 +70,7 @@ jobs:
       - name: Self-test builtin + example rubrics against a live judge
         run: |
           set -euo pipefail
-          for name in agents rag routing multi-agent; do
+          for name in agents rag routing multi-agent mast; do
             docket self-test "docket.dev/builtin/${name}/v1" --batch 8
           done
           for f in rubrics/examples/*.yaml; do

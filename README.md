@@ -161,7 +161,7 @@ idempotent.
 
 ## Built-in rubrics
 
-Four reference rubrics ship with the package; each is a starting point
+Five reference rubrics ship with the package; each is a starting point
 intended to be imported into a domain-specific rubric you maintain.
 
 | URI                                       | Modes |
@@ -170,6 +170,7 @@ intended to be imported into a domain-specific rubric you maintain.
 | `docket.dev/builtin/rag/v1`         | 4 — off-corpus answer, missing citation, stale retrieval, context overflow |
 | `docket.dev/builtin/routing/v1`     | 4 — wrong-skill routing, capability mismatch, dead-end transfer, oscillation |
 | `docket.dev/builtin/multi-agent/v1` | 4 — handoff context loss, conflicting instructions, role drift, shared-memory corruption |
+| `docket.dev/builtin/mast/v1`        | 7 — step repetition, conversation-history loss, unaware of termination, conversation reset, no clarification request, ignored agent input, action-reasoning mismatch (adapted from the [MAST taxonomy](https://arxiv.org/abs/2503.13657)) |
 
 Reference them by URI on the CLI (`--rubric docket.dev/builtin/rag/v1`)
 or import them into your own rubric:
