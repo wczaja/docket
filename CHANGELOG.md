@@ -17,6 +17,12 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   to the MAST authors; the subset is limited to modes detectable from a
   trace without ground-truth task outcomes. Compose it via `imports:`
   alongside the other builtins.
+- **MAST judge tuning harness** (`scripts/tune_mast_judges.py`): scores the
+  `mast/v1` `llm_judge` detectors against the MAD human-labelled dataset
+  (Cemri et al., arXiv:2503.13657) and reports per-mode precision/recall/F1
+  plus disagreements, for iterating on the judge prompts. Maintainer tool;
+  ships no MAD data — the dataset is fetched/provided by the user under its
+  own HuggingFace terms. Documented in `docs/tuning-mast-judges.md`.
 
 ## [1.0.0] - 2026-06-12
 
