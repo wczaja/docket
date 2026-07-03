@@ -373,8 +373,13 @@ def load_records(args: argparse.Namespace) -> list[dict[str, Any]]:
         )
     else:
         path = Path(args.data)
-    with path.open(encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
+    except OSError as e:
+        raise SystemExit(f"Cannot read MAD data file {path}: {e}") from e
+    except json.JSONDecodeError as e:
+        raise SystemExit(f"{path} is not valid JSON: {e}") from e
     if isinstance(data, dict):
         # Some dumps wrap the list under a top-level key.
         for key in ("data", "records", "traces", "dataset"):
@@ -387,15 +392,26 @@ def load_records(args: argparse.Namespace) -> list[dict[str, Any]]:
 
 
 def select_modes(rubric: Rubric, only: str | None) -> list[Mode]:
-    wanted = {m.strip() for m in only.split(",")} if only else None
-    modes: list[Mode] = []
-    for mode in rubric.modes:
-        if mode.id not in MAST_FM_BY_MODE_ID:
-            continue
-        if wanted is not None and mode.id not in wanted:
-            continue
-        modes.append(mode)
-    return modes
+    """Pick the mapped MAST modes to score, optionally restricted by `only`.
+
+    An id in `only` that doesn't name a mapped mode is an error, not a silent
+    skip — otherwise a typo would quietly shrink the run and the report would
+    look complete.
+    """
+    mast_ids = [m.id for m in rubric.modes if m.id in MAST_FM_BY_MODE_ID]
+    wanted = {m.strip() for m in only.split(",") if m.strip()} if only else None
+    if wanted is not None:
+        unknown = wanted - set(mast_ids)
+        if unknown:
+            raise SystemExit(
+                f"Unknown mode id(s) in --modes: {', '.join(sorted(unknown))}. "
+                f"Valid ids: {', '.join(mast_ids)}"
+            )
+    return [
+        mode
+        for mode in rubric.modes
+        if mode.id in MAST_FM_BY_MODE_ID and (wanted is None or mode.id in wanted)
+    ]
 
 
 async def score_mode(
@@ -437,8 +453,8 @@ async def score_mode(
 def write_disagreements(path: Path, outcomes: Sequence[ModeOutcome]) -> int:
     """Write every false positive/negative to a JSONL file; return the count.
 
-    Kept synchronous (not inlined into the async runner) so the blocking file
-    write stays off the event loop.
+    Plain blocking I/O: it runs once at the end of the run, after all judging
+    has completed, so there is nothing concurrent left to stall.
     """
     n = 0
     with path.open("w", encoding="utf-8") as f:
@@ -526,6 +542,20 @@ async def run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _positive_int(value: str) -> int:
+    n = int(value)
+    if n < 1:
+        raise argparse.ArgumentTypeError(f"must be >= 1 (got {n})")
+    return n
+
+
+def _nonnegative_int(value: str) -> int:
+    n = int(value)
+    if n < 0:
+        raise argparse.ArgumentTypeError(f"must be >= 0 (got {n})")
+    return n
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__,
@@ -549,9 +579,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=DEFAULT_PROVIDER_URI,
         help=f"provider:model URI for --live (default {DEFAULT_PROVIDER_URI}).",
     )
-    parser.add_argument("--batch", type=int, default=1, help="Traces per provider call (--live).")
     parser.add_argument(
-        "--limit", type=int, default=50, help="Max records to score (0 = all). Default 50."
+        "--batch", type=_positive_int, default=1, help="Traces per provider call (--live)."
+    )
+    parser.add_argument(
+        "--limit",
+        type=_nonnegative_int,
+        default=50,
+        help="Max records to score (0 = all). Default 50.",
     )
     parser.add_argument("--modes", default=None, help="Comma-separated mast/v1 mode ids to score.")
     parser.add_argument("--trace-field", default=None, help="'/'-path to the trace text field.")
@@ -563,7 +598,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--inspect",
-        type=int,
+        type=_nonnegative_int,
         default=0,
         metavar="N",
         help="Print the structure of the first N records and exit (schema discovery).",

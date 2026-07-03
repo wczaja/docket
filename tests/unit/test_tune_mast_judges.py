@@ -25,6 +25,7 @@ from scripts.tune_mast_judges import (
     extract_gold_label,
     extract_trace_text,
     get_by_path,
+    load_records,
     run,
     score_mode,
     select_modes,
@@ -154,6 +155,42 @@ def test_select_modes_filters_and_subsets() -> None:
     assert len(select_modes(rubric, None)) == len(MAST_FM_BY_MODE_ID)
     subset = select_modes(rubric, "step-repetition, conversation-reset")
     assert {m.id for m in subset} == {"step-repetition", "conversation-reset"}
+
+
+def test_select_modes_rejects_unknown_ids() -> None:
+    rubric = load_rubric(RUBRIC_URI)
+    with pytest.raises(SystemExit, match="step-repitition"):
+        select_modes(rubric, "step-repetition,step-repitition")
+
+
+def test_load_records_missing_file_is_a_clean_error(tmp_path: Path) -> None:
+    args = build_arg_parser().parse_args(["--data", str(tmp_path / "missing.json")])
+    with pytest.raises(SystemExit, match="Cannot read MAD data file"):
+        load_records(args)
+
+
+def test_load_records_invalid_json_is_a_clean_error(tmp_path: Path) -> None:
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json", encoding="utf-8")
+    args = build_arg_parser().parse_args(["--data", str(bad)])
+    with pytest.raises(SystemExit, match="not valid JSON"):
+        load_records(args)
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--data", "x.json", "--limit", "-1"],
+        ["--data", "x.json", "--batch", "0"],
+        ["--data", "x.json", "--inspect", "-2"],
+    ],
+)
+def test_arg_parser_rejects_out_of_range_values(
+    argv: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit):
+        build_arg_parser().parse_args(argv)
+    assert "must be >=" in capsys.readouterr().err
 
 
 async def test_score_mode_with_stub_detector() -> None:
