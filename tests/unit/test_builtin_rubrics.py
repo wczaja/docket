@@ -1,6 +1,6 @@
 """Deterministic checks for every builtin rubric.
 
-Each of the four v1 builtin rubrics must:
+Each of the five v1 builtin rubrics must:
 
   - Load successfully via `load_rubric(builtin_uri)`.
   - Pass the v1 schema validator.
@@ -26,6 +26,7 @@ _BUILTIN_URIS = [
     "docket.dev/builtin/rag/v1",
     "docket.dev/builtin/routing/v1",
     "docket.dev/builtin/multi-agent/v1",
+    "docket.dev/builtin/mast/v1",
 ]
 
 _VALID_SEVERITIES = {"critical", "high", "medium", "low"}
@@ -69,7 +70,7 @@ def test_builtin_rubric_modes_have_detection(builtin_rubric: Rubric) -> None:
 
 
 def test_every_builtin_uri_is_resolvable() -> None:
-    """Belt-and-braces: prove the four URIs the docs reference all resolve."""
+    """Belt-and-braces: prove the five URIs the docs reference all resolve."""
     for uri in _BUILTIN_URIS:
         rubric = load_rubric(uri)
         assert rubric.metadata.version == "1.0.0"

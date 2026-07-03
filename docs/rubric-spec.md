@@ -201,6 +201,7 @@ mode.
 | `docket.dev/builtin/rag/v1` | retrieval failures |
 | `docket.dev/builtin/routing/v1` | supervisor/router failures |
 | `docket.dev/builtin/multi-agent/v1` | orchestration failures |
+| `docket.dev/builtin/mast/v1` | MAST-taxonomy coordination failures (step repetition, history loss, termination unawareness, conversation reset, missing clarification, ignored agent input, action-reasoning mismatch) |
 
 ## Clustering
 

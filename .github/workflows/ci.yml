@@ -26,6 +26,11 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
       - name: Mypy
+        # mypy's target is pinned to python_version = 3.11 in pyproject.toml,
+        # so only the 3.11 leg's environment matches it. Newer legs resolve
+        # 3.12+-only dependency versions (e.g. numpy) whose stubs use PEP 695
+        # syntax that the 3.11 grammar rejects.
+        if: matrix.python-version == '3.11'
         run: mypy --strict docket
       - name: Pytest
         run: pytest -v

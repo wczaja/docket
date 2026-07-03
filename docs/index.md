@@ -18,6 +18,7 @@ by default.
 | Embed the pipeline in your own orchestration (Python) | [Python API reference](python-api.md) |
 | Drive the adapters from another agent or MCP client | [MCP servers reference](mcp-servers.md) |
 | Write or extend a failure-mode taxonomy | [Rubric DSL reference](rubric-spec.md) + [`rubrics/examples/sample-support-agent.yaml`](../rubrics/examples/sample-support-agent.yaml) |
+| Tune the MAST judges against real labels | [Tuning MAST judges](tuning-mast-judges.md) |
 | Understand or add a backend/tracker integration | [Adapters](adapters.md) |
 | See performance and cost numbers | [Benchmarks](benchmarks.md) |
 | Understand every design decision | [Design document](design.md) |

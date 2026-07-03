@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Builtin rubric `mast/v1`**: seven multi-agent coordination failure
+  modes adapted from the MAST taxonomy (Cemri et al., "Why Do Multi-Agent
+  LLM Systems Fail?", arXiv:2503.13657) — step repetition,
+  conversation-history loss, termination unawareness, conversation reset,
+  missing clarification, ignored agent input, and action-reasoning
+  mismatch. Definitions are re-expressed in docket's own words and credited
+  to the MAST authors; the subset is limited to modes detectable from a
+  trace without ground-truth task outcomes. Compose it via `imports:`
+  alongside the other builtins.
+- **MAST judge tuning harness** (`scripts/tune_mast_judges.py`): scores the
+  `mast/v1` `llm_judge` detectors against the MAD human-labelled dataset
+  (Cemri et al., arXiv:2503.13657) and reports per-mode precision/recall/F1
+  plus disagreements, for iterating on the judge prompts. Maintainer tool;
+  ships no MAD data by default — the dataset (CC-BY-4.0) is fetched/provided
+  by the user, with attribution. Documented in `docs/tuning-mast-judges.md`.
+
 ## [1.0.0] - 2026-06-12
 
 First stable release. Everything in design `docs/design.md` Phases 0-10,
