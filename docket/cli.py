@@ -278,10 +278,11 @@ def _demo_epilogue(
             "       ANTHROPIC_API_KEY=... docket demo --live"
         )
     lines.append(
-        "  3. Point it at a real backend: `docker compose --profile demo up` "
-        "starts Phoenix seeded with these traces (or seed your own with "
-        "`docket demo --to-phoenix URL`), then `docket run --backend "
-        "phoenix ...` — see docs/quickstart.md."
+        "  3. Point it at a real backend: start Phoenix (`docker compose up "
+        "phoenix` from the repo, or `docker run -p 6006:6006 -p 4317:4317 "
+        "arizephoenix/phoenix:latest`), seed it with `docket demo "
+        "--to-phoenix http://localhost:6006`, and run the printed command. "
+        "`docket init` scaffolds the config — see docs/quickstart.md."
     )
     return "\n".join(lines)
 
@@ -308,6 +309,168 @@ def _demo_seed_phoenix(phoenix_url: str) -> None:
     )
     if failures:
         sys.exit(1)
+
+
+_INIT_BACKENDS: dict[str, tuple[str, str]] = {
+    # backend -> (adapter command, env block template)
+    "phoenix": (
+        "docket-adapter-phoenix",
+        "    PHOENIX_URL: {phoenix_url}",
+    ),
+    "langfuse": (
+        "docket-adapter-langfuse",
+        "    LANGFUSE_HOST: {langfuse_host}\n"
+        "    LANGFUSE_PUBLIC_KEY: ${{LANGFUSE_PUBLIC_KEY}}\n"
+        "    LANGFUSE_SECRET_KEY: ${{LANGFUSE_SECRET_KEY}}",
+    ),
+    "langsmith": (
+        "docket-adapter-langsmith",
+        "    LANGSMITH_API_KEY: ${{LANGSMITH_API_KEY}}\n    LANGSMITH_PROJECT: {langsmith_project}",
+    ),
+}
+
+
+@main.command()
+@click.option(
+    "--path",
+    "config_out",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=Path("docket.yaml"),
+    show_default=True,
+    help="Where to write the config file.",
+)
+@click.option("--force", is_flag=True, help="Overwrite an existing config file.")
+def init(config_out: Path, force: bool) -> None:
+    """Interactively scaffold a docket.yaml (backend, tracker, rubric).
+
+    Every prompt has a sensible default, so pressing Enter through the
+    whole flow yields a working local-Phoenix, no-tracker, builtin-rubric
+    config. Secrets are referenced as ${ENV_VAR}, never written to disk.
+    """
+    if config_out.exists() and not force:
+        click.echo(
+            f"ERROR: {config_out} already exists; pass --force to overwrite.",
+            err=True,
+        )
+        sys.exit(1)
+
+    backend = click.prompt(
+        "Trace backend",
+        type=click.Choice(["phoenix", "langfuse", "langsmith"]),
+        default="phoenix",
+    )
+    env_values: dict[str, str] = {}
+    if backend == "phoenix":
+        env_values["phoenix_url"] = click.prompt("Phoenix URL", default="http://localhost:6006")
+    elif backend == "langfuse":
+        env_values["langfuse_host"] = click.prompt(
+            "Langfuse host", default="https://cloud.langfuse.com"
+        )
+    else:
+        env_values["langsmith_project"] = click.prompt("LangSmith project", default="default")
+    backend_command, backend_env_template = _INIT_BACKENDS[backend]
+    backend_env = backend_env_template.format(**env_values)
+
+    tracker = click.prompt(
+        "Issue tracker (none = queue drafts locally)",
+        type=click.Choice(["none", "github", "jira", "linear"]),
+        default="none",
+    )
+    tracker_block = ""
+    if tracker == "github":
+        owner = click.prompt("GitHub owner (user or org)")
+        repo = click.prompt("GitHub repo for issues")
+        tracker_block = (
+            "tracker:\n"
+            "  type: mcp\n"
+            "  command: docket-adapter-github\n"
+            "  env:\n"
+            "    GITHUB_TOKEN: ${GITHUB_TOKEN}\n"
+            f"    GITHUB_OWNER: {owner}\n"
+            f"    GITHUB_REPO: {repo}\n"
+        )
+    elif tracker == "jira":
+        host = click.prompt("Jira host (e.g. https://example.atlassian.net)")
+        project = click.prompt("Jira project key (e.g. AGT)")
+        tracker_block = (
+            "tracker:\n"
+            "  type: mcp\n"
+            "  command: docket-adapter-jira\n"
+            "  env:\n"
+            f"    JIRA_HOST: {host}\n"
+            f"    JIRA_PROJECT: {project}\n"
+            "    JIRA_EMAIL: ${JIRA_EMAIL}\n"
+            "    JIRA_API_TOKEN: ${JIRA_API_TOKEN}\n"
+        )
+    elif tracker == "linear":
+        team_id = click.prompt("Linear team ID (the UUID, not the team key)")
+        tracker_block = (
+            "tracker:\n"
+            "  type: mcp\n"
+            "  command: docket-adapter-linear\n"
+            "  env:\n"
+            "    LINEAR_API_KEY: ${LINEAR_API_KEY}\n"
+            f"    LINEAR_TEAM_ID: {team_id}\n"
+        )
+
+    rubric = click.prompt(
+        "Rubric (builtin URI or path to your YAML)",
+        default=DEFAULT_DEMO_RUBRIC,
+    )
+    try:
+        load_rubric(_normalize_cli_source(rubric))
+    except DocketError as e:
+        click.echo(f"ERROR: rubric {rubric!r} does not load: {e}", err=True)
+        sys.exit(1)
+
+    auto_post = click.prompt(
+        "Auto-post threshold (never = human reviews every draft)",
+        type=click.Choice(["never", "critical", "high", "medium", "low"]),
+        default="never",
+    )
+
+    tracker_section = (
+        tracker_block
+        if tracker_block
+        else "# No tracker configured: drafts queue locally for `docket queue` /\n"
+        "# `docket run --review`. Add one later — see docs/configuration.md.\n"
+    )
+    content = (
+        "# docket.yaml — generated by `docket init`.\n"
+        "# Reference for every field: docs/configuration.md\n"
+        "# Secrets stay in the environment; ${VAR} references are resolved at load.\n"
+        "\n"
+        "trace_backend:\n"
+        "  type: mcp\n"
+        f"  command: {backend_command}\n"
+        "  env:\n"
+        f"{backend_env}\n"
+        "\n"
+        f"{tracker_section}"
+        "\n"
+        f"rubric: {rubric}\n"
+        "\n"
+        "# Budget guardrails: the run aborts (loudly) past either ceiling.\n"
+        "max_traces_per_run: 1000\n"
+        "# max_estimated_cost_usd: 5.0\n"
+        "\n"
+        f"auto_post_threshold: {auto_post}\n"
+    )
+    config_out.write_text(content)
+    click.echo(f"\nWrote {config_out}.")
+
+    required_env = sorted(set(re.findall(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", content)))
+    if required_env:
+        click.echo("Export these before running: " + ", ".join(required_env))
+    click.echo(
+        "The classifier needs ANTHROPIC_API_KEY (or OPENAI_API_KEY with "
+        "--provider openai); clustering defaults to OpenAI embeddings — "
+        "single-key setups pass --clustering mode-only or --embedding local:... "
+        '(pip install "docket-runtime[local-embeddings]").'
+    )
+    click.echo("\nNext:\n")
+    click.echo(f"  docket run --config {config_out} --since 1h --dry-run   # price the window")
+    click.echo(f"  docket run --config {config_out} --since 1h             # real run")
 
 
 @main.command()
