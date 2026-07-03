@@ -60,25 +60,41 @@ pytest                        # unit tests; coverage gate is 90%
 Integration tests against a live Phoenix (and tracker sandboxes) are
 opt-in: `pytest --run-integration -m integration` — see
 `docs/e2e-testing.md`. PRs touching rubric files also trigger the
-`eval-rubrics` workflow, which validates every builtin and example
-rubric.
+`eval-rubrics` workflow, which validates every builtin, example, and
+registry rubric.
 
 ## Contributing a rubric
 
-The easiest first contribution. Builtin rubrics live in
-`docket/rubric/builtin/<name>/v1/rubric.yaml`; community examples
-in `rubrics/examples/`.
+The highest-leverage contribution. Three homes, by intent:
 
-1. Start from `rubrics/examples/sample-support-agent.yaml` and the DSL
-   reference in `docs/rubric-spec.md`.
-2. Keep it synthetic and domain-generic. Include `examples:` on
-   `llm_judge` modes — they are the rubric's self-test.
-3. `docket validate path/to/rubric.yaml` must exit 0, and
-   `docket self-test path/to/rubric.yaml` should pass with a real
-   judge model if you can run one.
-4. Add the rubric to the tests (`tests/unit/test_builtin_rubrics.py` or
-   `tests/unit/test_example_rubrics.py` picks up `rubrics/examples/*.yaml`
-   automatically).
+- **`rubrics/registry/<use-case>/v1/rubric.yaml`** — turnkey
+  taxonomies for a common agent shape (support, RAG, SQL, coding,
+  multi-agent, voice live there today). This is where new use-case
+  rubrics go.
+- `rubrics/examples/` — worked examples the docs walk through.
+- `docket/rubric/builtin/<name>/v1/rubric.yaml` — packaged baselines;
+  additions here need a design discussion first (they ship in the
+  wheel and get a `docket.dev/builtin/...` URI).
+
+The registry bar (enforced by `tests/unit/test_example_rubrics.py` on
+every PR):
+
+1. A real, nameable use case — six mediocre rubrics are worse than
+   three excellent ones, so depth beats breadth.
+2. Start from an existing registry rubric and the DSL reference in
+   `docs/rubric-spec.md`. Directory layout:
+   `rubrics/registry/<use-case>/v1/rubric.yaml` + a `README.md`
+   covering what it catches, trace assumptions, tuning knobs, and a
+   suggested auto-post ratchet path.
+3. **Every `llm_judge` mode ships at least one positive and one
+   negative `examples:` entry** — they are the judge prompt's
+   regression suite (`docket self-test`).
+4. Synthetic data only: invented products, prices, names, traces.
+5. `docket validate` must exit 0; run `docket self-test` with a real
+   judge model if you can. Semver applies: bump `metadata.version`
+   (major on meaning changes) — annotations and tracker labels carry
+   `rubric:<name>@<version>`, so versioning is what keeps re-runs
+   idempotent across your edits.
 
 ## Contributing an adapter
 

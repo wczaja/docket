@@ -1,0 +1,154 @@
+# Registry rubric: RAG knowledge-base assistant.
+# Turnkey starting point for Q&A assistants that answer from a document
+# corpus (help center, wiki, policy library). Builds on the rag/v1
+# builtin (off-corpus answers, missing citations, stale retrieval,
+# context overflow) with the failure modes that builtin deliberately
+# leaves domain-specific. Everything here is synthetic.
+#
+#   docket validate rubrics/registry/rag-knowledge-assistant/v1/rubric.yaml
+#   docket self-test rubrics/registry/rag-knowledge-assistant/v1/rubric.yaml
+apiVersion: docket.dev/v1
+kind: Rubric
+metadata:
+  name: registry-rag-knowledge-assistant
+  version: 1.0.0
+  description: |
+    Failure modes for a retrieval-grounded assistant: fabricated
+    citations, false "I don't know" responses when the corpus has the
+    answer, retrieval queries unrelated to the question, and silently
+    resolving conflicts between contradictory sources.
+
+imports:
+  - docket.dev/builtin/rag/v1
+
+modes:
+  - id: fabricated-citation
+    name: Fabricated Citation
+    description: |
+      Agent cited a document, page, or section that does not appear in
+      the retrieval set. Worse than a missing citation: it manufactures
+      false provenance that readers will trust.
+    severity: critical
+    detection:
+      type: llm_judge
+      prompt: |
+        List the sources the response cites (titles, filenames, URLs,
+        section headings). Compare against the documents actually
+        retrieved in the trace. Return positive=true if the response
+        cites any source that is not in the retrieval set.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          fabricated_source: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "Per the 2026 Compliance Handbook, section 4.2, retention is seven years."
+        context: "Retrieved documents: 'data-policy.md' and 'faq.md'. No compliance handbook was retrieved."
+        expected: positive
+      - trace_excerpt: "Per data-policy.md, retention is seven years."
+        context: "Retrieved documents include 'data-policy.md', which states a seven-year retention."
+        expected: negative
+
+  - id: false-unanswerable
+    name: False "I Don't Know"
+    description: |
+      Agent claimed the corpus doesn't cover the question while a
+      retrieved document plainly answers it. The silent recall killer:
+      users stop trusting the assistant long before anyone files a bug.
+    severity: high
+    detection:
+      type: llm_judge
+      prompt: |
+        The agent declined to answer or said the information is not
+        available. Check the retrieved documents in the trace: do any of
+        them contain a direct answer to the user's question? Return
+        positive=true if a retrieved document answers the question the
+        agent declared unanswerable.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          answering_passage: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "User: 'What's the maximum upload size?' Agent: 'I couldn't find that in our documentation.'"
+        context: "Retrieved 'limits.md' states: 'Maximum upload size is 250 MB per file.'"
+        expected: positive
+      - trace_excerpt: "User: 'What's the maximum upload size?' Agent: 'I couldn't find that in our documentation.'"
+        context: "Retrieved documents discuss pricing and SSO; none mention upload limits."
+        expected: negative
+
+  - id: query-question-mismatch
+    name: Retrieval Query Mismatch
+    description: |
+      The retrieval query the agent issued is semantically unrelated to
+      the user's question, so the whole answer is built on the wrong
+      passages. Usually a query-rewriting regression.
+    severity: high
+    detection:
+      type: llm_judge
+      prompt: |
+        Compare the user's question with the retrieval query (or search
+        tool input) the agent issued. Return positive=true if the query
+        targets a clearly different topic than the question — not just
+        broader or narrower, but semantically unrelated.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          issued_query: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "User: 'How do I rotate my API keys?' Retrieval tool input: {query: 'holiday support hours'}"
+        context: "Query topic is unrelated to the question."
+        expected: positive
+      - trace_excerpt: "User: 'How do I rotate my API keys?' Retrieval tool input: {query: 'API key rotation procedure'}"
+        context: "Query matches the question."
+        expected: negative
+
+  - id: conflict-silently-resolved
+    name: Source Conflict Silently Resolved
+    description: |
+      Retrieved documents contradict each other on the asked fact and
+      the agent presented one version as authoritative without flagging
+      the conflict. Common with versioned policy docs in one index.
+    severity: medium
+    detection:
+      type: llm_judge
+      prompt: |
+        Check whether two or more retrieved documents give conflicting
+        values for the fact the user asked about. If they conflict and
+        the response states one value without acknowledging the
+        disagreement, return positive=true.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          conflict: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "Agent: 'The free tier includes 3 seats.' Retrieved: pricing-2025.md says 3 seats; pricing-2026.md says 5 seats."
+        context: "Two retrieved documents conflict; response mentions neither the versions nor the conflict."
+        expected: positive
+      - trace_excerpt: "Agent: 'Our docs disagree — the 2026 page says 5 seats, the older 2025 page says 3. The current page is pricing-2026.md: 5 seats.'"
+        context: "Same conflicting retrieval, conflict surfaced and resolved with provenance."
+        expected: negative
+
+clustering:
+  strategy: per_mode_embedding
+  embedding_model: text-embedding-3-small
+  similarity_threshold: 0.82
+  min_cluster_size: 3
+
+triage:
+  auto_post_threshold: never
+  default_severity_to_tracker:
+    critical: P1
+    high: P2
+    medium: P3
+    low: P4
