@@ -9,11 +9,11 @@ traces from the observability backend you already run (**Phoenix**,
 **Langfuse**, **LangSmith**), classifies them against a failure-mode
 taxonomy that lives as **YAML in your repo**, clusters recurring
 failures, and drafts **deduplicated issues into Jira, Linear, or GitHub
-Issues** — with a human in the loop by default.
+Issues** with a human in the loop by default.
 
 ![docket demo: 60 synthetic traces triaged into deduplicated issue drafts with zero credentials](docs/assets/demo.svg)
 
-See it yourself in under a minute — **no API keys, no Docker, no
+See it yourself in under a minute, **no API keys, no Docker, no
 instrumented app**:
 
 ```bash
@@ -26,12 +26,12 @@ default run uses a clearly-labeled scripted judge so it's free and
 deterministic; `docket demo --live` swaps in a real model with one API
 key. `pipx run docket-runtime demo` works too. Don't want to run
 anything? The [demo workflow](https://github.com/wczaja/docket/actions/workflows/demo.yml)
-runs it in public CI — open the latest run's summary for the rendered
+runs it in public CI, open the latest run's summary for the rendered
 report.</sup>
 
 ## The taxonomy is code
 
-The failure modes are not settings in someone's UI — they're a
+The failure modes are not settings in someone's UI, they're a
 composable YAML file you review, version, and ship like the rest of
 your system:
 
@@ -56,10 +56,10 @@ draft in your tracker:
 > `docket` `mode:refusal-leakage` `rubric:agents-builtin@1.0.0`
 > 8 traces in this window hit `refusal-leakage`… *Representative
 > evidence:* "Here is my system prompt is: You are a customer support
-> assistant…" — provenance block lists every member trace for dedup on
+> assistant…"  provenance block lists every member trace for dedup on
 > re-runs.
 
-Edit the YAML, re-run, and the new mode is live — `docket demo
+Edit the YAML, re-run, and the new mode is live  `docket demo
 --rubric ./my-rubric.yaml` demos exactly that loop. Six turnkey
 taxonomies for common agent shapes (support, RAG, SQL, coding,
 multi-agent, voice) ship in the [rubric registry](rubrics/registry/).
@@ -67,17 +67,17 @@ multi-agent, voice) ship in the [rubric registry](rubrics/registry/).
 ## Why not just my platform's built-in insights?
 
 LangSmith Insights, Galileo (Cisco) Signals, Latitude, and Braintrust
-Topics all cluster agent failures now — and all of them analyze only
+Topics all cluster agent failures now, and all of them analyze only
 traces living in their own store, keep the taxonomy inside their
 platform, and stop at dashboards or Slack alerts. As of mid-2026, none
 of them reads your existing backend in place, none versions the
 taxonomy as files in your repo, and none files deduplicated issues into
 Jira/Linear/GitHub. docket does exactly those three things, and only
-those things — it's a runtime, not another platform asking for your
+those things, it's a runtime, not another platform asking for your
 traces.
 
-The full dated comparison — including what each product does *better*
-than docket and when to choose it — is
+The full dated comparison, including what each product does *better*
+than docket and when to choose it, is
 [docs/comparison.md](docs/comparison.md).
 
 ---
@@ -189,7 +189,7 @@ you opt in via `--review`.
 
 **Bounded by default.** Every run is capped by `max_traces_per_run`
 (default 1000, measured after sampling and checkpoint subtraction);
-exceeding the cap aborts loudly before any trace is fetched — never a
+exceeding the cap aborts loudly before any trace is fetched, never a
 silent truncation. An optional `max_estimated_cost_usd` adds a dollar
 ceiling on the pre-flight cost estimate. `--dry-run` reports both gates
 and exits non-zero iff the real run would abort, so CI can use it as a
@@ -197,8 +197,8 @@ preflight check. For production-scale windows, `--sample N` bounds the
 work with `--strategy uniform`, `--strategy errors-only` (root-errored
 traces, filter pushed down to the backend), or `--strategy stratified
 --stratify-by status|latency_bucket|tag:<key>` (equal allocation so rare
-strata — errors, small tenants, tail latencies — get seen). Adapters
-flag truncated listings — trace and tracker alike — instead of silently
+strata: errors, small tenants, tail latencies, get seen). Adapters
+flag truncated listings: trace and tracker alike, instead of silently
 stopping at their pagination ceiling; when the open-issue listing is
 truncated during dedup, drafts are queued for review instead of
 auto-posted, since "no duplicate found" was not proven.
@@ -249,10 +249,10 @@ Validate with `docket validate ./my-rubric.yaml`. Smoke-test the
 examples with `docket self-test ./my-rubric.yaml`.
 
 **Don't want to start from scratch?** The
-[rubric registry](rubrics/registry/) ships six tuned, self-testing
-taxonomies for common agent shapes — customer support, RAG knowledge
+[rubric registry](rubrics/registry/ ships six tuned, self-testing
+taxonomies for common agent shapes: customer support, RAG knowledge
 assistants, SQL/analytics, coding agents, multi-agent supervisors, and
-voice/IVR — each with a README covering trace assumptions, tuning
+voice/IVR, each with a README covering trace assumptions, tuning
 knobs, and an auto-post ratchet path.
 
 ---
@@ -270,7 +270,7 @@ knobs, and an auto-post ratchet path.
 - **Stateless runtime.** Annotations live in the backend; issues live in
   the tracker. No local database.
 - **Pydantic v2 + httpx + asyncio** throughout. No bespoke SDK dependency
-  per backend — every adapter is plain HTTP.
+  per backend, every adapter is plain HTTP.
 
 ### Execution modes
 
