@@ -1,0 +1,420 @@
+# Plan: demoability, positioning, rubric registry, calibration
+
+*Status: accepted plan, pre-implementation.*
+*Five improvement areas — demoability, positioning, setup friction,
+turnkey rubrics, and measured judge quality — each turned into a
+workstream with concrete steps and acceptance criteria, in the style
+of `design.md` §7.*
+
+---
+
+## 0. The five improvement areas
+
+| # | Item | Decision | Workstream |
+|---|---|---|---|
+| 1 | Add a comparison with LangSmith, Galileo, Latitude, etc. in the README/docs — claim the league, then differentiate on the vendor-neutral / taxonomies-in-source-control wedge | Adopt | [B](#workstream-b--comparison-page--readme-positioning) |
+| 2 | Make docket demoable without pulling it down; the moat must be visible in the first 30 seconds of the repo | Adopt — highest priority | [A](#workstream-a--a-30-second-demo) |
+| 3 | Remove all setup friction | Adopt | [C](#workstream-c--setup-friction-pass) |
+| 4 | Ship a small rubric registry with turnkey examples for common use cases | Adopt, scoped to an in-repo registry (`registry://` resolution stays v1.1+ per design §3) | [D](#workstream-d--use-case-rubric-registry) |
+| 5 | Publish a calibration report — real-world tuning experience, false-positive rates — so the project doesn't read as a generic judge-wrapper that files tickets | Adopt, staged: public-dataset calibration now; named case studies gated on real deployments | [E](#workstream-e--calibration-reports) |
+
+Two observations that shape the plan:
+
+- **None of this is architecture work.** The runtime already contains
+  most of the raw material: a synthetic seeded-failure trace generator
+  (`docket/_acceptance.py`), a free deterministic stub LLM provider
+  (used by `scripts/benchmark_classify.py` and `docket self-test`),
+  a judge-calibration harness with per-mode precision/recall/F1
+  (`scripts/tune_mast_judges.py`), packaged builtin rubrics, and a
+  markdown report renderer. The work is assembly, packaging, and
+  writing — which is why it is cheap relative to its leverage.
+- **The five areas compound in one direction.** The demo shows the
+  wedge; the comparison names it; the registry makes it turnkey; the
+  calibration makes it credible. Sequencing follows that logic: the
+  first 30 seconds come first.
+
+---
+
+## Workstream A — a 30-second demo
+
+**Goal:** someone who has never heard of docket sees the whole loop —
+*failure taxonomy in git → traces classified → clusters → drafted
+issues* — within 30 seconds of opening the repo, and can reproduce it
+locally in under a minute with **zero credentials, zero Docker, zero
+instrumented app**.
+
+### Gap today
+
+The quickstart's first output requires: `pip install` + a Phoenix
+container + traces from your own instrumented app + three credentials
+(`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, a tracker token). The README
+has no recording, no screenshot, no sample report, and no sample
+drafted issue. Nothing in the first screen *shows* the product.
+
+### Assets already in-tree
+
+- `docket/_acceptance.py` — 60 synthetic OpenInference traces
+  (20 clean, 40 seeded failures across five `agents/v1` modes,
+  including six semantically-similar refusal-leakage variants that
+  HDBSCAN clusters at production defaults). Purpose-built to produce
+  ≥1 cluster, ≥1 draft, and a non-trivial report.
+- The stub LLM provider (deterministic, free, no keys) already used
+  by the benchmark and the MAST tuning harness.
+- `docket/agent/report.py` — the markdown run report.
+- The local queue store — drafts already land as readable markdown
+  files without any tracker configured.
+
+### Steps
+
+- **A1. Demo trace backend.** Promote `docket/_acceptance.py` to a
+  public `docket/demo.py` and add an in-memory `demo` backend
+  (implements the same `TraceBackend` contract; registered in
+  `docket/runtime.py:build_backend`). No network, no state.
+- **A2. `docket demo` command** (`docket/cli.py`). Runs the *real*
+  pipeline — classify → cluster → draft → report — over the demo
+  backend:
+  - Default mode: stub judge + deterministic clustering. Zero keys,
+    zero cost, deterministic output, finishes in seconds. Clearly
+    labeled as a stubbed run in the output.
+  - `--live`: real provider judging with `ANTHROPIC_API_KEY` (or
+    OpenAI). Requires the C1 fix so one key suffices.
+  - Writes drafts + `report.md` to `./docket-demo/` (not
+    `~/.docket`), prints the report and one full drafted issue to
+    stdout.
+  - `--rubric PATH` passthrough, so the moat is *interactive*: copy
+    the demo rubric, add a mode, re-run, watch a new cluster appear.
+    The demo's closing hint should say exactly that.
+- **A3. Treat the printed report + draft as the demo's product
+  surface.** Review both renderings for skimmability (severity
+  ordering, trace counts, provenance block) — this output is what
+  every recording and CI log will show.
+- **A4. README hero.** Top of README, before prose:
+  - a terminal recording (asciinema → GIF/SVG, checked into
+    `docs/assets/`, regenerated by a small script so it never drifts
+    from real output) of `uvx docket-runtime demo`;
+  - a side-by-side snippet: 10 lines of rubric YAML → the drafted
+    issue it produced ("taxonomy in your repo → issues in your
+    tracker");
+  - the one-liner install: `uvx docket-runtime demo`.
+- **A5. Zero-install proof.** Two public artifacts linked from the
+  README so nobody has to run anything:
+  - a scheduled GitHub Actions `demo` workflow in this repo whose job
+    summary renders the run report (the report already pipes to
+    `$GITHUB_STEP_SUMMARY` in `examples/github-actions/triage.yml`) —
+    link "see the latest live run";
+  - a public demo-issues repo (e.g. `docket-demo-issues`) populated
+    by a real `--live` run with a tracker, so a skimmer can click an
+    actual drafted issue with its provenance comment and dedup labels.
+
+### Acceptance criteria
+
+- On a clean machine with **no env vars set**, `uvx docket-runtime
+  demo` (and `pipx run docket-runtime demo`) exits 0 in < 60 s and
+  ends with a printed drafted issue.
+- The README's first screenful (no scrolling) answers: what it is,
+  what it looks like running, what the rubric→issue loop is, and why
+  it's different (link to comparison).
+- `docket demo --live` works with exactly one API key.
+- The recording in the README is generated from the committed script,
+  not hand-edited.
+
+---
+
+## Workstream B — comparison page + README positioning
+
+**Goal:** a skimmer can answer "why not just LangSmith Insights /
+Galileo / Latitude?" from the README, and a serious evaluator gets an
+honest, dated comparison that survives contact with vendors' PMs.
+
+### Gap today
+
+The positioning exists but is buried in `design.md` §1.2–1.3
+(Latitude/GEPA, Galileo Insights Engine, LangSmith Insights,
+Traceloop). The README says what docket is *not*, but never puts it in
+the same frame as the products people already know.
+
+### Steps
+
+- **B1. `docs/comparison.md`.** One row per adjacent product, prose +
+  a capability table. Initial set: LangSmith Insights, Galileo
+  (Cisco) Insights Engine, Latitude (GEPA), Arize Phoenix evals,
+  Traceloop, and the eval-framework category (DeepEval, agentevals,
+  Braintrust) as one row. Comparison axes — chosen so docket's wedge
+  is structural, not feature-tier:
+  - works across the observability backend you already run vs.
+    requires their platform;
+  - failure taxonomy as a versioned, composable file in *your* repo
+    vs. configured in their UI;
+  - writes to external trackers (Jira/Linear/GitHub) vs. stays inside
+    the platform;
+  - open source (Apache-2.0) and self-contained vs. commercial;
+  - human-in-the-loop drafting as the default posture;
+  - scope honesty: these platforms do far more than docket (storage,
+    dashboards, evals at scale). docket is a thin triage runtime
+    *above* them, not a replacement — complementary, not competitive,
+    with the backends themselves.
+  - Every row gets: what it does better than docket, and when to
+    choose it. An "as of 2026-07" stamp + an invitation to file
+    corrections. Claims stay at the capability level (features drift;
+    architecture doesn't).
+- **B2. README comparison block.** A compact table (≤6 rows, 3–4
+  columns) placed immediately after the hero, linking to
+  `docs/comparison.md`. The wedge sentence above it: *"docket is not
+  another platform — it's the vendor-neutral triage layer above the
+  one you already have, with the failure taxonomy living in source
+  control."*
+- **B3. Single source of truth.** `design.md` §1.3 keeps the
+  historical rationale; it gains a pointer to `docs/comparison.md`,
+  which becomes the maintained surface. `docs/index.md` gets a row.
+
+### Acceptance criteria
+
+- README answers the "why not X?" question within the first two
+  screenfuls, without disparaging anyone.
+- Every competitor claim in `docs/comparison.md` is dated and phrased
+  at the capability level; a vendor PM reading their row would call
+  it fair.
+- The page ranks for the obvious doc-index path ("Comparison" entry
+  in `docs/index.md` and the README docs list).
+
+---
+
+## Workstream C — setup friction pass
+
+**Goal:** every step between "curious" and "first real run on my own
+traces" gets strictly cheaper; no credential is required unless the
+feature that needs it is in use.
+
+### Friction inventory (from the code, worst first)
+
+1. **`OPENAI_API_KEY` is required for clustering even when the
+   classifier is Anthropic** (`docket/llm/embeddings.py` ships OpenAI
+   + Voyage only). An Anthropic-only user must mint a second vendor
+   key just to try the tool. This also blocks A2's one-key `--live`
+   demo.
+2. **A live backend + instrumented app before any output.** Solved
+   for the first touch by Workstream A; still heavy for the second
+   touch ("now with a real backend").
+3. **Flag surface.** `docket run` has ~40 options; the config-file
+   path is documented but nothing generates one.
+4. **Install ergonomics.** Docs are pip-first; `uvx` one-liners are
+   absent.
+
+### Steps
+
+- **C1. Break the second-vendor-key requirement.** Two parallel
+  fixes, either alone is sufficient for the demo path:
+  - a local embedding provider behind an extra —
+    `pip install "docket-runtime[local-embeddings]"` (fastembed /
+    ONNX; no GPU) — registered alongside `openai:`/`voyage:` in
+    `build_embedding_provider`;
+  - a no-embeddings clustering fallback — `--clustering mode-only` —
+    that groups all positives of a mode into one cluster (lossy,
+    loudly labeled in the report). The current startup error for a
+    missing embedding key should name both alternatives.
+- **C2. Seeded-backend second touch.** `docket demo --to-phoenix
+  http://localhost:6006` ingests the demo traces into a real Phoenix
+  (reusing `scripts/ingest_acceptance_traces.py`'s OTLP path), then
+  prints the exact `docket run --backend phoenix ...` command to run
+  next. Add a `demo` profile to `docker-compose.yml` (Phoenix + a
+  one-shot seeding service) so the real-backend demo is:
+  `docker compose --profile demo up` → copy-paste one command. Update
+  `docs/local-phoenix.md` and the quickstart to lead with it.
+- **C3. `docket init`.** Interactive scaffolder: pick backend,
+  tracker (or none), rubric (builtin / registry / blank) → writes a
+  commented `docket.yaml` (the `docket.example.yaml` content,
+  filled in) and prints the single next command. Refuses to
+  overwrite; validates the result with the existing config loader.
+- **C4. Docs pass.** uv-first install everywhere (`uvx
+  docket-runtime demo`, `uv tool install docket-runtime`); quickstart
+  restructured as a ladder — demo (0 keys) → your backend (1 key,
+  read-only) → tracker (2 keys) → auto-post; the README quickstart
+  shrinks to the ladder's first two rungs.
+
+### Acceptance criteria
+
+- A user with only `ANTHROPIC_API_KEY` completes a real
+  classify→cluster→draft run via a documented flag or extra (no
+  OpenAI/Voyage account).
+- Real-backend demo is ≤ 2 commands from a clean machine (compose
+  profile + run).
+- `docket init` output passes `docket run --config … --dry-run`
+  without edits.
+- No doc instructs creating a credential before the step that uses it.
+
+---
+
+## Workstream D — use-case rubric registry
+
+**Goal:** a newcomer picks their use case from a list and gets a
+tuned, self-testable starting rubric — without writing YAML on day
+one. The registry is also the community-contribution surface the
+design doc already names as highest-leverage.
+
+### Gap today
+
+Five builtins (generic by design) + one worked example
+(`rubrics/examples/sample-support-agent.yaml`). The design's registry
+pattern ("pip for rubrics") is deliberately deferred: `https://` and
+`registry://` import schemes are reserved for v1.1+
+(`docket/rubric/_sources.py`). So v1 of the registry is a curated
+**in-repo directory**, not a service — which is also the honest
+version of "failure taxonomies live in source control."
+
+### Steps
+
+- **D1. Layout.** `rubrics/registry/<use-case>/v1/rubric.yaml` + a
+  per-rubric `README.md` (what it catches, the modes table, tuning
+  knobs, suggested `auto_post_threshold` ratchet, cost profile —
+  LLM-judge modes vs. deterministic modes).
+- **D2. Initial set — six rubrics, quality over breadth.** Each
+  imports the relevant builtins and adds 3–8 domain modes; **every
+  `llm_judge` mode ships ≥1 positive and ≥1 negative `examples`
+  entry** so `docket self-test` is meaningful:
+  1. `support-agent` — promote and extend the existing sample
+     (hallucinated pricing/policy, refund-without-confirmation,
+     misrouting, false-negative thumbs-down).
+  2. `rag-knowledge-assistant` — imports `rag/v1`; adds
+     answer-not-in-corpus with citation checks, stale-document use,
+     "I don't know" failures.
+  3. `sql-analytics-agent` — destructive-statement tool_call guard,
+     hallucinated table/column (judge vs. schema in context), silent
+     empty-result answers, runaway query loops.
+  4. `coding-agent` — fabricated API usage, test-gaming, destructive
+     shell tool_calls, giving up vs. task abandonment.
+  5. `multi-agent-supervisor` — imports `mast/v1` + `routing/v1` +
+     `multi-agent/v1`; adds severity remaps and a worked tuning
+     story (this is the calibrated one — see E).
+  6. `voice-ivr-agent` — barge-in/interruption mishandling, failed
+     handoff to human, confirmation-before-action for payments.
+- **D3. CI.** Extend `.github/workflows/eval-rubrics.yml`: the
+  `validate` loop and the gated `self-test` loop both cover
+  `rubrics/registry/**`. Registry rubrics are held to the same bar as
+  builtins on every PR.
+- **D4. Discovery.** `rubrics/registry/README.md` index table (use
+  case → modes → detector mix → judge-call cost per 100 traces);
+  linked from the README's rubric section, `docs/index.md`, and
+  `docket demo`'s closing hint. Optional (defer if noisy): `docket
+  rubrics list` printing builtins + how to reference registry files.
+- **D5. Stretch — remote reference.** Implementing `https://` rubric
+  imports (design v1.1) would let `--rubric` take a raw GitHub URL and
+  make the registry consumable without cloning. Tracked as the
+  existing design §7 item; not a blocker — `curl` + `--rubric ./file`
+  is the interim documented path.
+- **D6. Contribution guide.** A "contribute a rubric" section in
+  `CONTRIBUTING.md`: directory naming, semver rules (bump on mode
+  meaning change, per `docs/rubric-spec.md`), the examples
+  requirement, the self-test gate, and the review checklist.
+
+### Acceptance criteria
+
+- All registry rubrics pass `docket validate` in CI on every PR and
+  `docket self-test` in the gated job.
+- Each rubric's README states its tuning knobs and expected
+  false-positive posture; no rubric ships a judge mode without
+  examples.
+- A newcomer can go from "I have a RAG bot" to a validated first run
+  using a registry rubric without writing YAML.
+- The contribution path is documented end-to-end.
+
+---
+
+## Workstream E — calibration reports
+
+**Goal:** replace "trust the judges" with published, reproducible
+numbers — and give operators a method for producing the same numbers
+on their own traffic. This is the direct answer to the concern that
+the project could read as a generic judge-wrapper that files tickets.
+
+### What already exists
+
+`scripts/tune_mast_judges.py` + `docs/tuning-mast-judges.md` already
+score the real `mast/v1` judges against **MAD**, the MAST authors'
+public human-labelled dataset (CC-BY-4.0, attribution recorded),
+reporting per-mode precision/recall/F1 and dumping disagreements for
+prompt iteration. That is a calibration-report generator for one of
+five builtins, using public data — publishable **now**, with no
+customer-data or anonymization dependency.
+
+### Steps
+
+- **E1. Run the MAST calibration for real.** Full labelled set (ramp
+  with `--limit`; record spend), pinned judge model and rubric
+  version. Iterate the judge prompts via the documented
+  loop (`--dump-disagreements` → edit `detection.prompt` → re-run),
+  keeping every before/after F1 delta.
+- **E2. Publish `docs/calibration/mast-v1.md`.** Methodology, the
+  per-mode P/R/F1 table (micro + macro), error analysis themes, the
+  prompt changelog with metric deltas, model + rubric version pins,
+  total calibration cost in dollars, and the exact reproduce command.
+  Linked from the README (the credibility anchor: *measured judges,
+  not vibes*) and from `docs/comparison.md`.
+- **E3. Generalize the harness.** Factor the dataset-mapping layer of
+  `tune_mast_judges.py` so other labelled datasets can score other
+  rubrics (the `--trace-field` / `--label-template` machinery is most
+  of it). Also publish the already-measured synthetic numbers for
+  `agents/v1` (the acceptance gate: recall = 1.0, precision ≥ 0.9 on
+  seeded traces) with an explicit *synthetic* caveat — honest interim
+  signal, clearly labeled.
+- **E4. Field-calibration playbook.** `docs/calibration/field-guide.md`:
+  sample a window's classifications, human-label the sample (reusing
+  the disagreements JSONL format), compute the observed
+  false-positive rate per mode, and ratchet `auto_post_threshold`
+  accordingly. This documents the method a design partner would
+  follow — and specs the future `docket calibrate` command
+  (sample → label → report) as a design §7 roadmap entry, alongside
+  `--emit-evals` for turning confirmed failures into regression
+  cases.
+- **E5. Deployment case studies — gated on adoption.** When a real
+  team runs docket at scale and agrees to publish: an anonymization
+  checklist (the redaction layer in `docket/observability/redact.py`
+  is the starting point — nothing publishes without it), and a fixed
+  template: trace volume and window, modes triggered, FP rate before
+  and after tuning, time-to-triage delta. Named or anonymized per the
+  partner's choice. **Not fabricatable and not on the critical path**
+  — E1–E4 carry credibility until this exists.
+
+### Acceptance criteria
+
+- `docs/calibration/mast-v1.md` is live with pinned, reproducible
+  numbers and its dollar cost stated.
+- The README cites the calibration page wherever judge quality is
+  implied.
+- The field guide is followable by an external team without help from
+  a maintainer.
+
+---
+
+## Sequencing
+
+| Phase | Contents | Rationale |
+|---|---|---|
+| 1 — "the first 30 seconds" | A1–A4, B1–B2, C1 | The highest-leverage phase. C1 is load-bearing for A2's one-key `--live` mode. |
+| 2 — turnkey | C2–C4, D1–D4, D6, A5 | Second-touch friction + the registry; A5's public artifacts are best cut after the demo output is polished. |
+| 3 — credibility | E1–E4, B/README refresh, D5 | E1 needs an API budget; E5 stays open until a real deployment opts in. |
+
+Dependencies worth naming: A4's recording requires A2; A5's live
+artifacts benefit from C1; D2's supervisor rubric is the natural
+subject of E1's calibration story; everything in B can land
+independently.
+
+## Risks and guardrails
+
+- **Comparison staleness / fairness.** Commercial products move
+  monthly. Mitigation: capability-level claims only, an "as of" date,
+  sources linked, corrections invited. Never publish a row you
+  wouldn't defend to that vendor's team.
+- **"The demo is fake."** A stub-judge demo invites skepticism.
+  Mitigation: label the stub clearly in the output, make `--live` one
+  flag away, and let A5's real Actions run + real posted issues be
+  the proof.
+- **Registry breadth over quality.** Six mediocre rubrics are worse
+  than three excellent ones. Mitigation: the examples + self-test
+  gate is non-negotiable; cut D2 entries rather than ship unexampled
+  judge modes.
+- **Calibration overclaim.** MAD covers `mast/v1` only. Mitigation:
+  scope every published number to its rubric and dataset; label
+  synthetic numbers as synthetic; publish costs alongside metrics.
+- **Privacy.** Case studies and any future shared datasets go through
+  the anonymization checklist; private conversations and partner
+  names never enter the repo without written consent.
