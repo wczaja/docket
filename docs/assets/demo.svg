@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="818"
+     viewBox="0 0 860 818" font-family="ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace" font-size="13.5">
+  <title>docket demo — 60 synthetic traces triaged into deduplicated issue drafts, no credentials</title>
+  <style>
+    .l, .c { opacity: 0; animation: a 0.15s ease-out forwards; }
+    @keyframes a { to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) {
+      .l, .c { animation: none; opacity: 1; }
+    }
+  </style>
+  <rect width="860" height="818" rx="10" fill="#0d1117" stroke="#30363d"/>
+  <rect width="860" height="36" rx="10" fill="#161b22"/>
+  <rect y="26" width="860" height="10" fill="#161b22"/>
+  <circle cx="22" cy="18" r="6" fill="#ff5f57"/>
+  <circle cx="42" cy="18" r="6" fill="#febc2e"/>
+  <circle cx="62" cy="18" r="6" fill="#28c840"/>
+  <text x="430" y="22" text-anchor="middle" fill="#8b949e" font-size="12">docket demo — zero credentials, ~11s of your time</text>
+  <text x="22" y="56" fill="#e6edf3"><tspan fill="#3fb950">$ </tspan><tspan class="c" style="animation-delay:0.350s">u</tspan><tspan class="c" style="animation-delay:0.395s">v</tspan><tspan class="c" style="animation-delay:0.440s">x</tspan><tspan class="c" style="animation-delay:0.485s"> </tspan><tspan class="c" style="animation-delay:0.530s">d</tspan><tspan class="c" style="animation-delay:0.575s">o</tspan><tspan class="c" style="animation-delay:0.620s">c</tspan><tspan class="c" style="animation-delay:0.665s">k</tspan><tspan class="c" style="animation-delay:0.710s">e</tspan><tspan class="c" style="animation-delay:0.755s">t</tspan><tspan class="c" style="animation-delay:0.800s">-</tspan><tspan class="c" style="animation-delay:0.845s">r</tspan><tspan class="c" style="animation-delay:0.890s">u</tspan><tspan class="c" style="animation-delay:0.935s">n</tspan><tspan class="c" style="animation-delay:0.980s">t</tspan><tspan class="c" style="animation-delay:1.025s">i</tspan><tspan class="c" style="animation-delay:1.070s">m</tspan><tspan class="c" style="animation-delay:1.115s">e</tspan><tspan class="c" style="animation-delay:1.160s"> </tspan><tspan class="c" style="animation-delay:1.205s">d</tspan><tspan class="c" style="animation-delay:1.250s">e</tspan><tspan class="c" style="animation-delay:1.295s">m</tspan><tspan class="c" style="animation-delay:1.340s">o</tspan></text>
+  <text class="l" style="animation-delay:1.88s" x="22" y="85" fill="#8b949e">docket demo: 60 synthetic traces (20 clean, 40 seeded failures), rubric `agents-builtin`, judge…</text>
+  <text class="l" style="animation-delay:2.10s" x="22" y="106" fill="#8b949e">INFO listed 60 trace ids</text>
+  <text class="l" style="animation-delay:2.33s" x="22" y="127" fill="#8b949e">INFO classifying 60 traces against 6 modes (concurrency=8)</text>
+  <text class="l" style="animation-delay:2.55s" x="22" y="148" fill="#8b949e">INFO classified 60/60 traces</text>
+  <text class="l" style="animation-delay:2.77s" x="22" y="169" fill="#58a6ff">INFO classification complete: 40 positive, 320 negative, 0 errors</text>
+  <text class="l" style="animation-delay:2.99s" x="22" y="190" fill="#8b949e">INFO clustering positive classifications (embedding)</text>
+  <text class="l" style="animation-delay:3.21s" x="22" y="211" fill="#58a6ff">INFO produced 4 clusters</text>
+  <text class="l" style="animation-delay:3.43s" x="22" y="232" fill="#58a6ff">INFO drafted 4 issues</text>
+  <text class="l" style="animation-delay:3.90s" x="22" y="263" fill="#e6edf3"># docket run `4347e7bd40986fd4`</text>
+  <text class="l" style="animation-delay:4.12s" x="22" y="284" fill="#e6edf3">- **Traces processed**: 60</text>
+  <text class="l" style="animation-delay:4.34s" x="22" y="305" fill="#e6edf3">- **Clusters formed**: 4</text>
+  <text class="l" style="animation-delay:4.56s" x="22" y="326" fill="#e6edf3">- **Issues drafted**: 4</text>
+  <text class="l" style="animation-delay:5.03s" x="22" y="357" fill="#bc8cff">## Frequency by mode</text>
+  <text class="l" style="animation-delay:5.25s" x="22" y="378" fill="#8b949e">| mode | severity | positive | negative | error |</text>
+  <text class="l" style="animation-delay:5.46s" x="22" y="399" fill="#f85149">| `hallucination` | critical | 8 | 52 | 0 |</text>
+  <text class="l" style="animation-delay:5.68s" x="22" y="420" fill="#d29922">| `infinite-loop` | high | 8 | 52 | 0 |</text>
+  <text class="l" style="animation-delay:5.90s" x="22" y="441" fill="#d29922">| `premature-termination` | high | 8 | 52 | 0 |</text>
+  <text class="l" style="animation-delay:6.12s" x="22" y="462" fill="#d29922">| `unsafe-tool-call` | high | 8 | 52 | 0 |</text>
+  <text class="l" style="animation-delay:6.34s" x="22" y="483" fill="#e6edf3">| `refusal-leakage` | medium | 8 | 52 | 0 |</text>
+  <text class="l" style="animation-delay:6.81s" x="22" y="514" fill="#bc8cff">## Clusters</text>
+  <text class="l" style="animation-delay:7.03s" x="22" y="535" fill="#e6edf3">### `refusal-leakage` cluster `26cfd7b68684` (severity: medium, size: 8)</text>
+  <text class="l" style="animation-delay:7.25s" x="22" y="556" fill="#3fb950">- **Draft**: `Agent pastes its system prompt into refusal responses (8 traces)`</text>
+  <text class="l" style="animation-delay:7.47s" x="22" y="577" fill="#e6edf3">### `unsafe-tool-call` cluster `a48b99445bd1` (severity: high, size: 3)</text>
+  <text class="l" style="animation-delay:7.69s" x="22" y="598" fill="#3fb950">- **Draft**: `Destructive tool calls executed without user confirmation (3 traces)`</text>
+  <text class="l" style="animation-delay:8.16s" x="22" y="629" fill="#bc8cff"># Sample drafted issue</text>
+  <text class="l" style="animation-delay:8.38s" x="22" y="650" fill="#3fb950"># Agent loops past the span budget without terminating (8 traces)</text>
+  <text class="l" style="animation-delay:8.60s" x="22" y="671" fill="#e6edf3">**Severity**: high</text>
+  <text class="l" style="animation-delay:8.82s" x="22" y="692" fill="#8b949e">**Labels**: docket, mode:infinite-loop, rubric:agents-builtin@1.0.0</text>
+  <text class="l" style="animation-delay:9.29s" x="22" y="723" fill="#58a6ff">Drafts and report.md written to `docket-demo/`.</text>
+  <text class="l" style="animation-delay:9.82s" x="22" y="754" fill="#8b949e">60 traces in -&gt; 4 deduplicated issue drafts out. No API keys, no Docker,</text>
+  <text class="l" style="animation-delay:10.12s" x="22" y="775" fill="#8b949e">no instrumentation. Your taxonomy is the YAML file in your repo.</text>
+</svg>
