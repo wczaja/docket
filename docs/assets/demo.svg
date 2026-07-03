@@ -14,7 +14,8 @@
   <circle cx="22" cy="18" r="6" fill="#ff5f57"/>
   <circle cx="42" cy="18" r="6" fill="#febc2e"/>
   <circle cx="62" cy="18" r="6" fill="#28c840"/>
-  <text x="430" y="22" text-anchor="middle" fill="#8b949e" font-size="12">docket demo — zero credentials, ~11s of your time</text>
+  <text x="430" y="22" text-anchor="middle" fill="#8b949e"
+        font-size="12">docket demo — zero credentials, ~11s of your time</text>
   <text x="22" y="56" fill="#e6edf3"><tspan fill="#3fb950">$ </tspan><tspan class="c" style="animation-delay:0.350s">u</tspan><tspan class="c" style="animation-delay:0.395s">v</tspan><tspan class="c" style="animation-delay:0.440s">x</tspan><tspan class="c" style="animation-delay:0.485s"> </tspan><tspan class="c" style="animation-delay:0.530s">d</tspan><tspan class="c" style="animation-delay:0.575s">o</tspan><tspan class="c" style="animation-delay:0.620s">c</tspan><tspan class="c" style="animation-delay:0.665s">k</tspan><tspan class="c" style="animation-delay:0.710s">e</tspan><tspan class="c" style="animation-delay:0.755s">t</tspan><tspan class="c" style="animation-delay:0.800s">-</tspan><tspan class="c" style="animation-delay:0.845s">r</tspan><tspan class="c" style="animation-delay:0.890s">u</tspan><tspan class="c" style="animation-delay:0.935s">n</tspan><tspan class="c" style="animation-delay:0.980s">t</tspan><tspan class="c" style="animation-delay:1.025s">i</tspan><tspan class="c" style="animation-delay:1.070s">m</tspan><tspan class="c" style="animation-delay:1.115s">e</tspan><tspan class="c" style="animation-delay:1.160s"> </tspan><tspan class="c" style="animation-delay:1.205s">d</tspan><tspan class="c" style="animation-delay:1.250s">e</tspan><tspan class="c" style="animation-delay:1.295s">m</tspan><tspan class="c" style="animation-delay:1.340s">o</tspan></text>
   <text class="l" style="animation-delay:1.88s" x="22" y="85" fill="#8b949e">docket demo: 60 synthetic traces (20 clean, 40 seeded failures), rubric `agents-builtin`, judge…</text>
   <text class="l" style="animation-delay:2.10s" x="22" y="106" fill="#8b949e">INFO listed 60 trace ids</text>
@@ -24,7 +25,7 @@
   <text class="l" style="animation-delay:2.99s" x="22" y="190" fill="#8b949e">INFO clustering positive classifications (embedding)</text>
   <text class="l" style="animation-delay:3.21s" x="22" y="211" fill="#58a6ff">INFO produced 4 clusters</text>
   <text class="l" style="animation-delay:3.43s" x="22" y="232" fill="#58a6ff">INFO drafted 4 issues</text>
-  <text class="l" style="animation-delay:3.90s" x="22" y="263" fill="#e6edf3"># docket run `4347e7bd40986fd4`</text>
+  <text class="l" style="animation-delay:3.90s" x="22" y="263" fill="#e6edf3"># docket run `344942adbc129d73`</text>
   <text class="l" style="animation-delay:4.12s" x="22" y="284" fill="#e6edf3">- **Traces processed**: 60</text>
   <text class="l" style="animation-delay:4.34s" x="22" y="305" fill="#e6edf3">- **Clusters formed**: 4</text>
   <text class="l" style="animation-delay:4.56s" x="22" y="326" fill="#e6edf3">- **Issues drafted**: 4</text>
@@ -36,9 +37,9 @@
   <text class="l" style="animation-delay:6.12s" x="22" y="462" fill="#d29922">| `unsafe-tool-call` | high | 8 | 52 | 0 |</text>
   <text class="l" style="animation-delay:6.34s" x="22" y="483" fill="#e6edf3">| `refusal-leakage` | medium | 8 | 52 | 0 |</text>
   <text class="l" style="animation-delay:6.81s" x="22" y="514" fill="#bc8cff">## Clusters</text>
-  <text class="l" style="animation-delay:7.03s" x="22" y="535" fill="#e6edf3">### `refusal-leakage` cluster `26cfd7b68684` (severity: medium, size: 8)</text>
+  <text class="l" style="animation-delay:7.03s" x="22" y="535" fill="#e6edf3">### `refusal-leakage` cluster `5ca812cc3054` (severity: medium, size: 8)</text>
   <text class="l" style="animation-delay:7.25s" x="22" y="556" fill="#3fb950">- **Draft**: `Agent pastes its system prompt into refusal responses (8 traces)`</text>
-  <text class="l" style="animation-delay:7.47s" x="22" y="577" fill="#e6edf3">### `unsafe-tool-call` cluster `a48b99445bd1` (severity: high, size: 3)</text>
+  <text class="l" style="animation-delay:7.47s" x="22" y="577" fill="#e6edf3">### `unsafe-tool-call` cluster `2e11ff5ace74` (severity: high, size: 3)</text>
   <text class="l" style="animation-delay:7.69s" x="22" y="598" fill="#3fb950">- **Draft**: `Destructive tool calls executed without user confirmation (3 traces)`</text>
   <text class="l" style="animation-delay:8.16s" x="22" y="629" fill="#bc8cff"># Sample drafted issue</text>
   <text class="l" style="animation-delay:8.38s" x="22" y="650" fill="#3fb950"># Agent loops past the span budget without terminating (8 traces)</text>

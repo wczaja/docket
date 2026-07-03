@@ -1,0 +1,70 @@
+name: Demo
+
+# The zero-credential demo, run in public on a schedule so the README can
+# link to living proof instead of claims. Two tiers, mirroring
+# eval-rubrics.yml:
+#
+#   demo        — scripted judge; free, no secrets; every push to main +
+#                 weekly (schedule keeps the linked "latest run" fresh).
+#   demo-live   — real judge via ANTHROPIC_API_KEY; on demand or when the
+#                 repo opts in via the RUN_LIVE_DEMO variable. Secrets are
+#                 unavailable to fork PRs by design.
+#
+# Each job pipes the run report into $GITHUB_STEP_SUMMARY, so the Actions
+# page renders the markdown report + sample drafted issue directly.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docket/**"
+      - ".github/workflows/demo.yml"
+  schedule:
+    - cron: "23 7 * * 1" # weekly, Monday 07:23 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install docket
+        run: pip install .
+      - name: Run the demo (scripted judge — no credentials)
+        run: |
+          set -euo pipefail
+          docket demo --quiet --out demo-out | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload drafts + report
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-output
+          path: demo-out
+
+  demo-live:
+    runs-on: ubuntu-latest
+    needs: demo
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.RUN_LIVE_DEMO == 'true' }}
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install docket
+        run: pip install .
+      - name: Run the demo (live judge)
+        run: |
+          set -euo pipefail
+          docket demo --live --quiet --out demo-live-out | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload drafts + report
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-live-output
+          path: demo-live-out

@@ -194,9 +194,13 @@ def render_svg(rows: list[tuple[str, str, bool]]) -> str:
 
     height = y + PAD_BOTTOM
     total = t + 1.0
+    title = (
+        "docket demo — 60 synthetic traces triaged into deduplicated issue drafts, no credentials"
+    )
+    chrome_label = f"docket demo — zero credentials, ~{int(total)}s of your time"
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="{WIDTH}" height="{height}"
      viewBox="0 0 {WIDTH} {height}" font-family="{FONT}" font-size="{FONT_SIZE}">
-  <title>docket demo — 60 synthetic traces triaged into deduplicated issue drafts, no credentials</title>
+  <title>{title}</title>
   <style>
     .l, .c {{ opacity: 0; animation: a 0.15s ease-out forwards; }}
     @keyframes a {{ to {{ opacity: 1; }} }}
@@ -210,7 +214,8 @@ def render_svg(rows: list[tuple[str, str, bool]]) -> str:
   <circle cx="22" cy="18" r="6" fill="#ff5f57"/>
   <circle cx="42" cy="18" r="6" fill="#febc2e"/>
   <circle cx="62" cy="18" r="6" fill="#28c840"/>
-  <text x="{WIDTH // 2}" y="22" text-anchor="middle" fill="{DIM}" font-size="12">docket demo — zero credentials, ~{int(total)}s of your time</text>
+  <text x="{WIDTH // 2}" y="22" text-anchor="middle" fill="{DIM}"
+        font-size="12">{chrome_label}</text>
 {chr(10).join("  " + row for row in body_rows)}
 </svg>
 """

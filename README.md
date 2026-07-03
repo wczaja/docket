@@ -24,7 +24,10 @@ uvx docket-runtime demo
 `uvx --from git+https://github.com/wczaja/docket docket demo`. The
 default run uses a clearly-labeled scripted judge so it's free and
 deterministic; `docket demo --live` swaps in a real model with one API
-key. `pipx run docket-runtime demo` works too.</sup>
+key. `pipx run docket-runtime demo` works too. Don't want to run
+anything? The [demo workflow](https://github.com/wczaja/docket/actions/workflows/demo.yml)
+runs it in public CI — open the latest run's summary for the rendered
+report.</sup>
 
 ## The taxonomy is code
 
