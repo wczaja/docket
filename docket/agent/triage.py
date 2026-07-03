@@ -34,7 +34,7 @@ from docket.agent.report import render_report
 from docket.agent.review import ReviewOutcome
 from docket.agent.subagents.annotator import Annotator
 from docket.agent.subagents.classifier import Classifier, flatten_classifications
-from docket.agent.subagents.clusterer import cluster_per_mode
+from docket.agent.subagents.clusterer import cluster_mode_only, cluster_per_mode
 from docket.agent.subagents.drafter import DEFAULT_QUEUE_DIR, draft_issues
 from docket.agent.subagents.poster import (
     AutoPostThreshold,
@@ -126,6 +126,7 @@ async def run_triage_pipeline(
     max_traces: int | None = None,
     max_estimated_cost_usd: float | None = None,
     emit_evals_dir: Path | None = None,
+    clustering: str = "embedding",
 ) -> TriageResult:
     """Run the full Phase 5 pipeline: fetch -> classify -> annotate ->
     cluster -> draft -> report.
@@ -155,7 +156,12 @@ async def run_triage_pipeline(
         aborts with `BudgetExceededError` if the estimate exceeds it.
       - `emit_evals_dir`: when set, each cluster is also exported as a
         candidate eval case JSON file (design §1.1 item 5).
+      - `clustering`: "embedding" (default; per-mode HDBSCAN over excerpt
+        embeddings) or "mode-only" (one cluster per firing mode; needs no
+        embedding provider — the single-API-key operating mode).
     """
+    if clustering not in ("embedding", "mode-only"):
+        raise ValueError(f"clustering must be 'embedding' or 'mode-only', got {clustering!r}")
     rubric_version = f"{rubric.metadata.name}@{rubric.metadata.version}"
     final_run_id = run_id or compute_run_id(
         backend_id=backend_id,
@@ -167,15 +173,17 @@ async def run_triage_pipeline(
         from docket.llm import DEFAULT_PROVIDER_URI
 
         llm_provider = build_provider(DEFAULT_PROVIDER_URI)
-    if embedding_provider is None:
+    if embedding_provider is None and clustering == "embedding":
         from docket.llm import DEFAULT_EMBEDDING_URI
 
         embedding_provider = build_embedding_provider(DEFAULT_EMBEDDING_URI)
-    # Eagerly validate both providers' credentials so a missing API key
+    # Eagerly validate the providers' credentials so a missing API key
     # aborts at startup, before any backend I/O (design §4.4: credential
-    # failure must not produce a partial run).
+    # failure must not produce a partial run). Mode-only clustering has no
+    # embedding provider to validate — that is its point.
     llm_provider.preflight()
-    embedding_provider.preflight()
+    if clustering == "embedding" and embedding_provider is not None:
+        embedding_provider.preflight()
 
     started_at = datetime.now(UTC)
     log.info(
@@ -364,13 +372,21 @@ async def run_triage_pipeline(
             )
 
     # 4. Cluster.
-    log.info("clustering positive classifications")
-    clusters = await cluster_per_mode(
-        all_classifications,
-        rubric=rubric,
-        embedding_provider=embedding_provider,
-        traces_by_id=dict(traces),
-    )
+    log.info("clustering positive classifications (%s)", clustering)
+    if clustering == "mode-only":
+        clusters = cluster_mode_only(
+            all_classifications,
+            rubric=rubric,
+            traces_by_id=dict(traces),
+        )
+    else:
+        assert embedding_provider is not None  # noqa: S101 -- guaranteed by the default above
+        clusters = await cluster_per_mode(
+            all_classifications,
+            rubric=rubric,
+            embedding_provider=embedding_provider,
+            traces_by_id=dict(traces),
+        )
     log.info("produced %d clusters", len(clusters))
 
     # 5. Draft.
@@ -462,6 +478,16 @@ async def run_triage_pipeline(
         dedup_outcomes=dedup_outcomes or None,
         queue_dir=output_dir,
     )
+
+    # Persist the report next to the queued drafts (the documented contract;
+    # the deep-agent mode stores the same content at /report.md in its vfs).
+    # Same window -> same run_id -> overwriting on re-run is idempotent.
+    report_dir = output_dir if output_dir is not None else DEFAULT_QUEUE_DIR
+    try:
+        report_dir.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread((report_dir / "report.md").write_text, report_md)
+    except OSError as e:
+        log.warning("could not write report.md to %s: %s", report_dir, e)
 
     return TriageResult(
         run_report=run_report,

@@ -28,6 +28,7 @@ _BACKEND_ALIASES: dict[str, str] = {
     "docket-adapter-langfuse": "langfuse",
     "langsmith": "langsmith",
     "docket-adapter-langsmith": "langsmith",
+    "demo": "demo",
 }
 
 
@@ -105,7 +106,16 @@ def build_backend(  # noqa: PLR0913 -- per-backend kwargs form one logical surfa
             api_key=api_key,
             project=langsmith_project or env.get("LANGSMITH_PROJECT"),
         )
-    raise ConfigError(f"Unknown trace backend {name!r}. Supported: phoenix, langfuse, langsmith.")
+    if name == "demo":
+        # In-memory synthetic fixture (docket.demo): lets every `run`
+        # feature — sampling, checkpoint, dry-run, trackers — be exercised
+        # without a real backend. `docket demo` is the zero-key wrapper.
+        from docket.demo import DemoBackend
+
+        return DemoBackend()
+    raise ConfigError(
+        f"Unknown trace backend {name!r}. Supported: phoenix, langfuse, langsmith, demo."
+    )
 
 
 def _strip_adapter_prefix(command: str) -> str:

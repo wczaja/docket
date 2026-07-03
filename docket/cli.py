@@ -78,6 +78,238 @@ def validate(source: str) -> None:
     click.echo(f"OK: {source} ({rubric.metadata.name} v{rubric.metadata.version})")
 
 
+DEFAULT_DEMO_RUBRIC = "docket.dev/builtin/agents/v1"
+_SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+
+
+@main.command()
+@click.option(
+    "--live",
+    is_flag=True,
+    help="Judge with a real LLM provider instead of the scripted demo judge. "
+    "Needs the provider's API key; everything else stays local and free.",
+)
+@click.option(
+    "--provider",
+    "provider_uri",
+    default=None,
+    help="provider:model URI for --live (default: the standard provider). "
+    "Only meaningful together with --live.",
+)
+@click.option(
+    "--embedding",
+    "embedding_uri",
+    default=None,
+    help="provider:model URI for clustering embeddings (e.g. "
+    "'openai:text-embedding-3-small'). Default: free deterministic demo "
+    "embeddings — no key needed, even with --live.",
+)
+@click.option(
+    "--rubric",
+    "rubric_source",
+    type=str,
+    default=None,
+    help=f"Rubric to classify against (default: {DEFAULT_DEMO_RUBRIC}). "
+    "Point at your own YAML to see taxonomy-as-code in action; custom "
+    "llm_judge modes need --live to be judged by a real model.",
+)
+@click.option(
+    "--out",
+    "out_dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("docket-demo"),
+    show_default=True,
+    help="Directory for the queued issue drafts and report.md.",
+)
+@click.option(
+    "--to-phoenix",
+    "phoenix_url",
+    default=None,
+    metavar="URL",
+    help="Don't run the pipeline; instead ingest the demo traces into a "
+    "running Phoenix at URL (e.g. http://localhost:6006) and print the "
+    "`docket run` command that triages them there.",
+)
+@click.option("-v", "--verbose", count=True, help="Increase log verbosity (repeatable).")
+@click.option("--quiet", is_flag=True, help="Suppress progress logs; print only the results.")
+def demo(  # noqa: PLR0913 -- CLI options form one logical unit
+    live: bool,
+    provider_uri: str | None,
+    embedding_uri: str | None,
+    rubric_source: str | None,
+    out_dir: Path,
+    phoenix_url: str | None,
+    verbose: int,
+    quiet: bool,
+) -> None:
+    """Run the real triage pipeline on bundled synthetic traces. No setup.
+
+    Classifies 60 synthetic agent traces (20 clean + 40 seeded failures)
+    against the builtin `agents/v1` failure-mode rubric, clusters the
+    positives, and drafts issues into local files — the exact pipeline
+    `docket run` executes against a real backend, minus the credentials:
+    no API keys, no Docker, no instrumented app.
+
+    By default the LLM-judge modes run under a clearly-labeled scripted
+    judge (deterministic, free). Pass --live to judge with a real model
+    using one API key. The deterministic detectors (regex, tool_call,
+    metric_threshold) run for real either way.
+    """
+    _configure_logging(quiet=quiet, verbose=verbose)
+    if phoenix_url is not None:
+        _demo_seed_phoenix(phoenix_url)
+        return
+
+    from docket.demo import (
+        DEMO_BACKEND_ID,
+        DemoBackend,
+        DemoEmbeddingProvider,
+        DemoJudgeProvider,
+        demo_summary,
+    )
+    from docket.llm import DEFAULT_PROVIDER_URI
+    from docket.llm.base import ModelProvider
+
+    try:
+        source = rubric_source if rubric_source is not None else DEFAULT_DEMO_RUBRIC
+        rubric = load_rubric(_normalize_cli_source(source))
+        llm_provider: ModelProvider
+        if live:
+            llm_provider = build_provider(provider_uri or DEFAULT_PROVIDER_URI)
+        elif provider_uri is not None:
+            raise ConfigError(
+                "--provider only applies with --live; the default demo judge is scripted."
+            )
+        else:
+            llm_provider = DemoJudgeProvider()
+        embedding_provider = (
+            build_embedding_provider(embedding_uri)
+            if embedding_uri is not None
+            else DemoEmbeddingProvider()
+        )
+    except DocketError as e:
+        click.echo(f"ERROR: {e}", err=True)
+        sys.exit(1)
+
+    summary = demo_summary()
+    judge_label = (
+        f"live model `{llm_provider.model}`"
+        if live
+        else "scripted demo judge (deterministic, free — pass --live for a real model)"
+    )
+    click.echo(
+        f"docket demo: {summary['total']} synthetic traces "
+        f"({summary['clean']} clean, {summary['seeded_failures']} seeded failures), "
+        f"rubric `{rubric.metadata.name}`, judge: {judge_label}\n"
+    )
+
+    backend = DemoBackend()
+    until = datetime.now(UTC)
+    since = until - timedelta(hours=1)
+
+    async def _demo_run() -> TriageResult:
+        return await run_triage_pipeline(
+            backend=backend,
+            rubric=rubric,
+            since=since,
+            until=until,
+            llm_provider=llm_provider,
+            embedding_provider=embedding_provider,
+            backend_id=DEMO_BACKEND_ID,
+            output_dir=out_dir,
+            max_traces=DEFAULT_MAX_TRACES_PER_RUN,
+        )
+
+    try:
+        result = asyncio.run(_demo_run())
+    except DocketError as e:
+        click.echo(f"ERROR: {e}", err=True)
+        sys.exit(1)
+
+    click.echo(result.report_markdown)
+    if result.drafts:
+        top = min(result.drafts, key=lambda d: _SEVERITY_RANK.get(d.severity, 9))
+        click.echo("\n---\n\n# Sample drafted issue\n")
+        click.echo(top.to_markdown())
+    click.echo(_demo_epilogue(result, out_dir=out_dir, live=live, llm_provider=llm_provider))
+
+
+def _demo_epilogue(
+    result: TriageResult,
+    *,
+    out_dir: Path,
+    live: bool,
+    llm_provider: Any,
+) -> str:
+    from docket.demo import DemoJudgeProvider
+
+    lines = ["", "---", "", f"Drafts and report.md written to `{out_dir}/`."]
+    halluc = next(
+        (ms for ms in result.run_report.mode_stats if ms.mode_id == "hallucination"),
+        None,
+    )
+    if (
+        halluc is not None
+        and halluc.positive_count
+        and not any(c.mode_id == "hallucination" for c in result.clusters)
+    ):
+        lines.append(
+            f"Note: {halluc.positive_count} `hallucination` positives formed no "
+            "cluster — each falsehood is distinct, and groups smaller than the "
+            "rubric's `min_cluster_size: 3` are dropped, not drafted. That is "
+            "the issue-spam guard doing its job."
+        )
+    if isinstance(llm_provider, DemoJudgeProvider) and llm_provider.unknown_judge_calls:
+        lines.append(
+            f"WARNING: {llm_provider.unknown_judge_calls} llm_judge evaluations hit "
+            "modes the scripted judge doesn't know; they scored negative. Pass "
+            "--live to judge custom modes with a real model."
+        )
+    lines += [
+        "",
+        "Where to go from here:",
+        "  1. The taxonomy is code. Copy a rubric (rubrics/ in the repo, or "
+        "start from the builtin), add a mode, and re-run:",
+        "       docket demo --rubric ./my-rubric.yaml --live",
+    ]
+    if not live:
+        lines.append(
+            "  2. Same traces, real judge (one API key):\n"
+            "       ANTHROPIC_API_KEY=... docket demo --live"
+        )
+    lines.append(
+        "  3. Point it at a real backend: `docker compose --profile demo up` "
+        "starts Phoenix seeded with these traces (or seed your own with "
+        "`docket demo --to-phoenix URL`), then `docket run --backend "
+        "phoenix ...` — see docs/quickstart.md."
+    )
+    return "\n".join(lines)
+
+
+def _demo_seed_phoenix(phoenix_url: str) -> None:
+    from docket.demo import ingest_to_phoenix
+
+    click.echo(f"Ingesting demo traces into Phoenix at {phoenix_url} ...")
+    ingested, failures = asyncio.run(ingest_to_phoenix(phoenix_url))
+    for failure in failures:
+        click.echo(f"  FAIL {failure}", err=True)
+    if ingested == 0:
+        click.echo(
+            f"ERROR: nothing ingested — is Phoenix running at {phoenix_url}? "
+            "Start one with: docker compose up phoenix (or docker run -p 6006:6006 "
+            "-p 4317:4317 arizephoenix/phoenix:latest)",
+            err=True,
+        )
+        sys.exit(1)
+    click.echo(f"Ingested {ingested} traces. Triage them with:\n")
+    click.echo(
+        f"  docket run --backend phoenix --phoenix-url {phoenix_url} \\\n"
+        f"      --rubric {DEFAULT_DEMO_RUBRIC} --since 1h"
+    )
+    if failures:
+        sys.exit(1)
+
+
 @main.command()
 @click.option(
     "--rubric",
@@ -110,9 +342,11 @@ def validate(source: str) -> None:
 )
 @click.option(
     "--backend",
-    type=click.Choice(["phoenix", "langfuse", "langsmith"]),
+    type=click.Choice(["phoenix", "langfuse", "langsmith", "demo"]),
     default=None,
-    help="Override the trace backend. Supports: phoenix, langfuse, langsmith.",
+    help="Override the trace backend. Supports: phoenix, langfuse, langsmith, "
+    "and demo (bundled synthetic traces — see `docket demo` for the "
+    "zero-credential wrapper).",
 )
 @click.option(
     "--phoenix-url",
@@ -363,8 +597,20 @@ def validate(source: str) -> None:
     "embedding_uri",
     default=None,
     help="Embedding provider for clustering, as 'provider:model' "
-    "(e.g. 'openai:text-embedding-3-small', 'voyage:voyage-3.5-lite'). "
-    "Default: OpenAI; use voyage with VOYAGE_API_KEY for OpenAI-less setups.",
+    "(e.g. 'openai:text-embedding-3-small', 'voyage:voyage-3.5-lite', "
+    "'local:BAAI/bge-small-en-v1.5'). Default: OpenAI. voyage needs "
+    "VOYAGE_API_KEY; local needs no key (pip install "
+    '"docket-runtime[local-embeddings]").',
+)
+@click.option(
+    "--clustering",
+    type=click.Choice(["embedding", "mode-only"]),
+    default="embedding",
+    show_default=True,
+    help="Clustering strategy. 'embedding': per-mode HDBSCAN over excerpt "
+    "embeddings (needs an embedding provider). 'mode-only': one cluster per "
+    "firing mode, no embeddings — the single-API-key operating mode; lossy "
+    "(sub-patterns within a mode are not separated).",
 )
 @click.option(
     "-v",
@@ -425,6 +671,7 @@ def run(  # noqa: PLR0913 -- CLI options form one logical unit
     max_traces: int | None,
     emit_evals_dir: Path | None,
     embedding_uri: str | None,
+    clustering: str,
     verbose: int,
     quiet: bool,
 ) -> None:
@@ -501,6 +748,7 @@ def run(  # noqa: PLR0913 -- CLI options form one logical unit
             ("--sample", sample_count is not None),
             ("--checkpoint", checkpoint),
             ("--auto-post-threshold", auto_post_threshold is not None),
+            ("--clustering", clustering != "embedding"),
         ]
         for flag, was_set in ignored:
             if was_set:
@@ -589,6 +837,7 @@ def run(  # noqa: PLR0913 -- CLI options form one logical unit
                 max_traces=resolved_max_traces,
                 max_estimated_cost_usd=max_estimated_cost_usd,
                 emit_evals_dir=emit_evals_dir,
+                clustering=clustering,
             )
             if review and tracker_adapter is None:
                 click.echo(
@@ -1260,6 +1509,23 @@ _SHARED_PIPELINE_OPTIONS: list[Any] = [
         "matters.",
     ),
     click.option(
+        "--embedding",
+        "embedding_uri",
+        default=None,
+        help="Embedding provider for clustering, as 'provider:model' "
+        "(e.g. 'openai:text-embedding-3-small', 'voyage:voyage-3.5-lite', "
+        "'local:BAAI/bge-small-en-v1.5'). Default: OpenAI.",
+    ),
+    click.option(
+        "--clustering",
+        type=click.Choice(["embedding", "mode-only"]),
+        default="embedding",
+        show_default=True,
+        help="Clustering strategy: 'embedding' (per-mode HDBSCAN, needs an "
+        "embedding provider) or 'mode-only' (one cluster per firing mode, "
+        "no embeddings needed; lossy).",
+    ),
+    click.option(
         "-v",
         "--verbose",
         count=True,
@@ -1399,6 +1665,8 @@ async def _serve_tick(
     sample_count: int | None,
     sample_strategy: str,
     checkpoint: bool,
+    embedding_uri: str | None = None,
+    clustering: str = "embedding",
 ) -> TriageResult:
     """One serve tick: the deterministic pipeline over [since_dt, until_dt].
 
@@ -1413,6 +1681,9 @@ async def _serve_tick(
             since=since_dt,
             until=until_dt,
             llm_provider=inv.llm_provider,
+            embedding_provider=(
+                build_embedding_provider(embedding_uri) if embedding_uri is not None else None
+            ),
             batch_size=batch_size,
             concurrency=concurrency,
             write_annotations=annotate,
@@ -1426,6 +1697,7 @@ async def _serve_tick(
             checkpoint=checkpoint,
             max_traces=inv.max_traces,
             max_estimated_cost_usd=inv.max_cost,
+            clustering=clustering,
         )
     finally:
         await inv.backend.close()
@@ -1487,6 +1759,8 @@ def serve(  # noqa: PLR0913 -- CLI options form one logical unit
     sample_strategy: str,
     max_traces: int | None,
     checkpoint: bool,
+    embedding_uri: str | None,
+    clustering: str,
     interval: str,
     max_ticks: int | None,
     verbose: int,
@@ -1573,6 +1847,8 @@ def serve(  # noqa: PLR0913 -- CLI options form one logical unit
                         sample_count=sample_count,
                         sample_strategy=sample_strategy,
                         checkpoint=checkpoint,
+                        embedding_uri=embedding_uri,
+                        clustering=clustering,
                     )
                 )
             except DocketError as e:
