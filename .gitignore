@@ -22,5 +22,8 @@ htmlcov/
 .venv/
 venv/
 
+# `docket demo` output (regenerable; default --out lands in the cwd)
+docket-demo/
+
 # uv lockfile — project is unlocked; pyproject.toml is the source of truth
 uv.lock
