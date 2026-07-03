@@ -11,7 +11,11 @@ by default.
 
 | If you want to… | Read |
 |---|---|
+| See it run in 60 seconds, zero credentials | `uvx docket-runtime demo` — or the [README](../README.md) hero |
 | Get a first run working in minutes | [Quickstart](quickstart.md) (the [README](../README.md) has the 5-minute Phoenix+GitHub path) |
+| Compare with LangSmith / Galileo / Latitude / etc. | [How docket compares](comparison.md) |
+| Pick a turnkey rubric for your use case | [Rubric registry](../rubrics/registry/README.md) |
+| See measured judge quality + calibrate your own | [Calibration](calibration/README.md) |
 | Learn the vocabulary | [Concepts](concepts.md) |
 | Look up a command, flag, or exit code | [CLI reference](cli.md) |
 | Configure via file / env vars, check precedence and defaults | [Configuration reference](configuration.md) |
