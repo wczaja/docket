@@ -149,8 +149,11 @@ async def test_review_handles_empty_input() -> None:
 async def test_review_invokes_editor_when_set(tmp_path: Path) -> None:
     """Use a tiny editor stub that rewrites the title heading in-place."""
     editor_script = tmp_path / "fake_editor.sh"
+    # sed -i is not portable (BSD sed requires an argument), so write to a
+    # temp file and move it back.
     editor_script.write_text(
-        "#!/usr/bin/env bash\nsed -i 's/Original title/Edited title/' \"$1\"\n"
+        "#!/usr/bin/env bash\n"
+        'sed \'s/Original title/Edited title/\' "$1" > "$1.tmp" && mv "$1.tmp" "$1"\n'
     )
     editor_script.chmod(0o755)
 
