@@ -405,3 +405,73 @@ async def test_unrelated_typeerror_from_hdbscan_propagates(
             rubric=rubric,
             embedding_provider=provider,
         )
+
+
+# --- cluster_mode_only (the --clustering mode-only fallback) -----------------
+
+
+def test_mode_only_groups_all_positives_per_mode() -> None:
+    """Dissimilar excerpts that embeddings would separate still land in one
+    cluster per mode — that's the documented lossy trade."""
+    leak = Mode(id="leak", severity="medium", detection=Detection(type="regex", pattern="x"))
+    halluc = Mode(id="halluc", severity="critical", detection=Detection(type="regex", pattern="y"))
+    rubric = _rubric([leak, halluc], min_cluster_size=3)
+    classifications = [
+        _classification(f"l-{i}", "leak", excerpt=f"completely different text {i}")
+        for i in range(3)
+    ] + [_classification(f"h-{i}", "halluc", excerpt=f"unrelated falsehood {i}") for i in range(4)]
+
+    clusters = clusterer_mod.cluster_mode_only(classifications, rubric=rubric)
+
+    assert {(c.mode_id, c.stats.size) for c in clusters} == {("leak", 3), ("halluc", 4)}
+
+
+def test_mode_only_respects_min_cluster_size() -> None:
+    mode = Mode(id="leak", severity="medium", detection=Detection(type="regex", pattern="x"))
+    rubric = _rubric([mode], min_cluster_size=3)
+    classifications = [_classification(f"t-{i}", "leak", excerpt="a") for i in range(2)]
+    assert clusterer_mod.cluster_mode_only(classifications, rubric=rubric) == []
+
+
+def test_mode_only_skips_negatives_errors_and_unknown_modes() -> None:
+    mode = Mode(id="leak", severity="medium", detection=Detection(type="regex", pattern="x"))
+    rubric = _rubric([mode], min_cluster_size=2)
+    ok = [_classification(f"t-{i}", "leak", excerpt="a") for i in range(2)]
+    negative = Classification(
+        trace_id="t-neg", rubric_version="cluster-test@0.0.1", mode_id="leak", positive=False
+    )
+    errored = Classification(
+        trace_id="t-err",
+        rubric_version="cluster-test@0.0.1",
+        mode_id="leak",
+        positive=True,
+        error="boom",
+    )
+    unknown = _classification("t-unk", "not-in-rubric", excerpt="a")
+
+    clusters = clusterer_mod.cluster_mode_only([*ok, negative, errored, unknown], rubric=rubric)
+
+    assert len(clusters) == 1
+    assert sorted(clusters[0].member_trace_ids) == ["t-0", "t-1"]
+
+
+def test_mode_only_representative_is_highest_confidence() -> None:
+    mode = Mode(id="leak", severity="medium", detection=Detection(type="regex", pattern="x"))
+    rubric = _rubric([mode], min_cluster_size=2)
+    classifications = [
+        _classification("t-low", "leak", excerpt="low", confidence=0.4),
+        _classification("t-high", "leak", excerpt="high", confidence=0.95),
+    ]
+    clusters = clusterer_mod.cluster_mode_only(classifications, rubric=rubric)
+    assert clusters[0].representative_trace_id == "t-high"
+
+
+def test_mode_only_redacts_excerpts() -> None:
+    mode = Mode(id="leak", severity="medium", detection=Detection(type="regex", pattern="x"))
+    rubric = _rubric([mode], min_cluster_size=2)
+    classifications = [
+        _classification(f"t-{i}", "leak", excerpt="reach me at user@example.com", confidence=0.9)
+        for i in range(2)
+    ]
+    clusters = clusterer_mod.cluster_mode_only(classifications, rubric=rubric)
+    assert "user@example.com" not in clusters[0].representative_excerpt

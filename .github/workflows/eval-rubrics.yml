@@ -51,6 +51,12 @@ jobs:
           for f in rubrics/examples/*.yaml; do
             docket validate "$f"
           done
+      - name: Validate registry rubrics
+        run: |
+          set -euo pipefail
+          for f in rubrics/registry/*/v1/rubric.yaml; do
+            docket validate "$f"
+          done
 
   self-test:
     runs-on: ubuntu-latest
@@ -67,12 +73,12 @@ jobs:
         run: pip install uv
       - name: Install package
         run: uv pip install --system -e .
-      - name: Self-test builtin + example rubrics against a live judge
+      - name: Self-test builtin + example + registry rubrics against a live judge
         run: |
           set -euo pipefail
           for name in agents rag routing multi-agent mast; do
             docket self-test "docket.dev/builtin/${name}/v1" --batch 8
           done
-          for f in rubrics/examples/*.yaml; do
+          for f in rubrics/examples/*.yaml rubrics/registry/*/v1/rubric.yaml; do
             docket self-test "$f" --batch 8
           done

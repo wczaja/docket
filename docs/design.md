@@ -53,6 +53,11 @@ Adjacent commercial offerings exist but each is tied to its own platform:
 
 The gap: a runtime that works across all of these, configured by a portable rubric spec.
 
+*(The bullets above are the design-time snapshot that motivated the
+project. The maintained, dated comparison — including products that
+shipped after this document was written — is
+[`docs/comparison.md`](comparison.md).)*
+
 ### 1.4 In-scope for v1.0
 
 - Python 3.11+ runtime

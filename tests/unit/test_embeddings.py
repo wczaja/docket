@@ -1,3 +1,4 @@
+import importlib.util
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
@@ -6,8 +7,10 @@ import pytest
 
 from docket.errors import CredentialError, DetectionError
 from docket.llm.embeddings import (
+    DEFAULT_LOCAL_EMBEDDING_MODEL,
     DEFAULT_OPENAI_EMBEDDING_MODEL,
     DEFAULT_VOYAGE_EMBEDDING_MODEL,
+    LocalEmbeddingProvider,
     OpenAIEmbeddingProvider,
     VoyageEmbeddingProvider,
     build_embedding_provider,
@@ -182,3 +185,75 @@ def test_build_embedding_provider_voyage() -> None:
     provider = build_embedding_provider("voyage:voyage-3.5-lite")
     assert isinstance(provider, VoyageEmbeddingProvider)
     assert provider.model == DEFAULT_VOYAGE_EMBEDDING_MODEL
+
+
+# --- LocalEmbeddingProvider (the `local-embeddings` extra) -------------------
+
+
+class _FakeLocalEngine:
+    """Stands in for fastembed.TextEmbedding; embed() is sync like the real one."""
+
+    def __init__(self, vectors: list[list[float]] | None = None) -> None:
+        self.vectors = vectors
+        self.calls: list[list[str]] = []
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
+        if self.vectors is not None:
+            return self.vectors
+        return [[0.1, 0.2] for _ in texts]
+
+
+def test_build_embedding_provider_local() -> None:
+    provider = build_embedding_provider("local:custom/model-x")
+    assert isinstance(provider, LocalEmbeddingProvider)
+    assert provider.model == "custom/model-x"
+
+
+def test_local_default_model() -> None:
+    assert LocalEmbeddingProvider().model == DEFAULT_LOCAL_EMBEDDING_MODEL
+
+
+def test_local_preflight_without_fastembed_names_the_extra() -> None:
+    if importlib.util.find_spec("fastembed") is not None:
+        pytest.skip("fastembed is installed; the missing-extra path is unreachable")
+    with pytest.raises(CredentialError, match="local-embeddings"):
+        LocalEmbeddingProvider().preflight()
+
+
+def test_local_preflight_with_injected_engine_is_a_no_op() -> None:
+    LocalEmbeddingProvider(engine=_FakeLocalEngine()).preflight()  # must not raise
+
+
+async def test_local_embed_wraps_engine_output_as_float_lists() -> None:
+    provider = LocalEmbeddingProvider(engine=_FakeLocalEngine())
+    result = await provider.embed(["a", "b"])
+    assert result == [[0.1, 0.2], [0.1, 0.2]]
+    assert all(isinstance(x, float) for vector in result for x in vector)
+
+
+async def test_local_embed_empty_input_skips_engine() -> None:
+    engine = _FakeLocalEngine()
+    provider = LocalEmbeddingProvider(engine=engine)
+    assert await provider.embed([]) == []
+    assert engine.calls == []
+
+
+async def test_local_embed_count_mismatch_raises() -> None:
+    provider = LocalEmbeddingProvider(engine=_FakeLocalEngine(vectors=[[0.1]]))
+    with pytest.raises(DetectionError, match="returned 1 vectors for 2 inputs"):
+        await provider.embed(["a", "b"])
+
+
+def test_openai_missing_key_error_names_every_alternative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The default-provider failure is the single worst first-run stumble;
+    the error must hand the user all three ways out."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(CredentialError) as exc_info:
+        OpenAIEmbeddingProvider().preflight()
+    message = str(exc_info.value)
+    assert "voyage" in message
+    assert "local-embeddings" in message
+    assert "mode-only" in message

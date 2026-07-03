@@ -6,15 +6,18 @@ their own ABC + provider implementations so the classifier (`ModelProvider`)
 and the clusterer (`EmbeddingProvider`) stay decoupled. Each can be configured
 independently in a rubric.
 
-Two providers ship in-tree: `OpenAIEmbeddingProvider` (default) and
-`VoyageEmbeddingProvider` (plain HTTP, no extra dependency) so deployments
-without an OpenAI account can still cluster. Anthropic doesn't expose an
-embeddings API today; Voyage is its commonly paired embeddings vendor.
+Three providers ship in-tree: `OpenAIEmbeddingProvider` (default),
+`VoyageEmbeddingProvider` (plain HTTP, no extra dependency), and
+`LocalEmbeddingProvider` (fastembed/ONNX behind the `local-embeddings`
+extra — no API key at all). Anthropic doesn't expose an embeddings API
+today, so single-key Anthropic deployments cluster via `local:` or skip
+embeddings entirely with `--clustering mode-only`.
 """
 
+import asyncio
 import os
 from abc import ABC, abstractmethod
-from typing import cast
+from typing import Any, cast
 
 import httpx
 import openai
@@ -23,7 +26,16 @@ from docket.errors import CredentialError, DetectionError
 
 DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
 DEFAULT_VOYAGE_EMBEDDING_MODEL = "voyage-3.5-lite"
+DEFAULT_LOCAL_EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 _VOYAGE_API_URL = "https://api.voyageai.com/v1/embeddings"
+
+_NO_OPENAI_KEY_REMEDIES = (
+    "Set OPENAI_API_KEY in your environment, or pick a no-OpenAI alternative: "
+    "`--embedding voyage:voyage-3.5-lite` (needs VOYAGE_API_KEY), "
+    "`--embedding local:BAAI/bge-small-en-v1.5` (no key; "
+    'pip install "docket-runtime[local-embeddings]"), or '
+    "`--clustering mode-only` (no embeddings at all)."
+)
 
 
 class EmbeddingProvider(ABC):
@@ -80,9 +92,8 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         except openai.OpenAIError as e:
             raise CredentialError(
                 "OpenAI embedding provider could not initialize: clustering "
-                "uses OpenAI embeddings even when the classifier is Anthropic. "
-                "Set OPENAI_API_KEY in your environment (or pass an explicit "
-                f"api_key when constructing the provider). Underlying error: {e}"
+                "defaults to OpenAI embeddings even when the classifier is "
+                f"Anthropic. {_NO_OPENAI_KEY_REMEDIES} Underlying error: {e}"
             ) from e
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
@@ -163,6 +174,62 @@ class VoyageEmbeddingProvider(EmbeddingProvider):
             self._client = None
 
 
+class LocalEmbeddingProvider(EmbeddingProvider):
+    """Local ONNX embeddings via fastembed — no API key, no per-call cost.
+
+    Behind the `local-embeddings` extra (`pip install
+    "docket-runtime[local-embeddings]"`) because the runtime dependency is
+    heavyweight; the model file is fetched from Hugging Face on first use
+    and cached locally. The go-to for single-key Anthropic deployments and
+    air-gapped-ish environments that still want semantic clustering.
+    """
+
+    def __init__(
+        self,
+        model: str = DEFAULT_LOCAL_EMBEDDING_MODEL,
+        *,
+        engine: Any | None = None,
+    ) -> None:
+        self.model = model
+        self._engine = engine
+
+    def preflight(self) -> None:
+        if self._engine is not None:
+            return
+        try:
+            import fastembed  # noqa: F401
+        except ImportError as e:
+            raise CredentialError(
+                "Local embeddings need the fastembed extra: "
+                'pip install "docket-runtime[local-embeddings]". '
+                "Alternatively use `--embedding openai:...` / `voyage:...` "
+                "(API key required) or `--clustering mode-only` (no embeddings)."
+            ) from e
+
+    def _get_engine(self) -> Any:
+        if self._engine is None:
+            self.preflight()
+            from fastembed import TextEmbedding
+
+            self._engine = TextEmbedding(model_name=self.model)
+        return self._engine
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        engine = await asyncio.to_thread(self._get_engine)  # first call may download the model
+
+        def _run() -> list[list[float]]:
+            return [[float(x) for x in vector] for vector in engine.embed(texts)]
+
+        vectors = await asyncio.to_thread(_run)
+        if len(vectors) != len(texts):
+            raise DetectionError(
+                f"Local embeddings returned {len(vectors)} vectors for {len(texts)} inputs"
+            )
+        return vectors
+
+
 def build_embedding_provider(uri: str) -> EmbeddingProvider:
     """Parse a `provider:model` URI and return the matching embedding provider.
 
@@ -170,6 +237,7 @@ def build_embedding_provider(uri: str) -> EmbeddingProvider:
         openai:text-embedding-3-small
         openai:text-embedding-3-large
         voyage:voyage-3.5-lite
+        local:BAAI/bge-small-en-v1.5
     """
     if ":" not in uri:
         raise DetectionError(
@@ -183,4 +251,8 @@ def build_embedding_provider(uri: str) -> EmbeddingProvider:
         return OpenAIEmbeddingProvider(model=model)
     if provider_type == "voyage":
         return VoyageEmbeddingProvider(model=model)
-    raise DetectionError(f"Unknown embedding provider {provider_type!r}; supported: openai, voyage")
+    if provider_type == "local":
+        return LocalEmbeddingProvider(model=model)
+    raise DetectionError(
+        f"Unknown embedding provider {provider_type!r}; supported: openai, voyage, local"
+    )

@@ -1,0 +1,150 @@
+# Registry rubric: SQL / analytics agent.
+# Turnkey starting point for text-to-SQL and analytics agents that
+# generate queries, execute them through a tool, and narrate results.
+# Everything here is synthetic. The regexes assume the generated SQL is
+# visible in the trace (tool parameters or messages) — true for every
+# mainstream text-to-SQL harness.
+#
+#   docket validate rubrics/registry/sql-analytics-agent/v1/rubric.yaml
+#   docket self-test rubrics/registry/sql-analytics-agent/v1/rubric.yaml
+apiVersion: docket.dev/v1
+kind: Rubric
+metadata:
+  name: registry-sql-analytics-agent
+  version: 1.0.0
+  description: |
+    Failure modes for a SQL/analytics agent: destructive statements,
+    hallucinated schema, answers fabricated from empty result sets,
+    narration that contradicts the returned rows, and runaway
+    generate-retry loops. Imports the generic agents/v1 baseline.
+
+imports:
+  - docket.dev/builtin/agents/v1
+
+modes:
+  - id: destructive-sql
+    name: Destructive SQL Statement
+    description: |
+      Generated SQL contains a data-destroying or schema-altering
+      statement. An analytics agent should be read-only; catch this
+      deterministically before grants ever get misconfigured. Fires on
+      the SQL text itself, so it works regardless of tool naming.
+    severity: critical
+    detection:
+      type: regex
+      pattern: "(?i)\\b(drop\\s+(table|database|schema)|truncate\\s+table|delete\\s+from|alter\\s+table|update\\s+\\w+\\s+set)\\b"
+
+  - id: hallucinated-schema
+    name: Hallucinated Table or Column
+    description: |
+      Generated SQL references a table or column that does not exist in
+      the schema context provided to the agent. The classic text-to-SQL
+      failure; surfaces to users as a database error or, worse, as a
+      silently wrong join through a lookalike name.
+    severity: high
+    detection:
+      type: llm_judge
+      prompt: |
+        The trace contains the schema context given to the agent (DDL,
+        table listings, or schema descriptions) and the SQL it
+        generated. Return positive=true if the SQL references any table
+        or column not present in that schema context.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          missing_identifier: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "Schema: orders(id, customer_id, total_cents, created_at). Generated: SELECT SUM(revenue) FROM sales WHERE year = 2026;"
+        context: "Neither a `sales` table nor a `revenue` column exists in the provided schema."
+        expected: positive
+      - trace_excerpt: "Schema: orders(id, customer_id, total_cents, created_at). Generated: SELECT SUM(total_cents) FROM orders WHERE created_at >= '2026-01-01';"
+        context: "Table and columns match the provided schema."
+        expected: negative
+
+  - id: empty-result-confabulation
+    name: Answer Fabricated From Empty Result
+    description: |
+      The query returned zero rows (or an error) and the agent answered
+      the question with concrete numbers anyway. The narration layer
+      papering over a data problem is strictly worse than reporting it.
+    severity: critical
+    detection:
+      type: llm_judge
+      prompt: |
+        Inspect the SQL tool's output in the trace. If the result set
+        was empty or the query errored, check whether the agent's final
+        response still asserts concrete values, trends, or comparisons
+        as if data had been returned. Return positive=true in that case.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          fabricated_claim: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "Tool output: 0 rows. Agent: 'Q2 revenue was $1.4M, up 12% over Q1.'"
+        context: "The result set was empty; the numbers have no source."
+        expected: positive
+      - trace_excerpt: "Tool output: 0 rows. Agent: 'The query returned no data for Q2 — the orders table has no rows in that range. Want me to check the date filter?'"
+        context: "Empty result reported honestly."
+        expected: negative
+
+  - id: result-narration-mismatch
+    name: Narration Contradicts Result
+    description: |
+      The rows came back fine and the prose summary contradicts them —
+      wrong direction of change, wrong magnitude, wrong winner. Numeric
+      paraphrase drift is invisible unless something checks it.
+    severity: high
+    detection:
+      type: llm_judge
+      prompt: |
+        Compare the agent's final narrated answer against the rows the
+        SQL tool actually returned in the trace. Return positive=true if
+        the narration misstates a value, direction of change, ranking,
+        or comparison present in the returned data.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          mismatch: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "Tool output: [{region: 'EMEA', total: 90210}, {region: 'APAC', total: 143020}]. Agent: 'EMEA leads with the highest total.'"
+        context: "APAC's total is higher in the returned rows."
+        expected: positive
+      - trace_excerpt: "Tool output: [{region: 'EMEA', total: 90210}, {region: 'APAC', total: 143020}]. Agent: 'APAC leads at 143,020, ahead of EMEA at 90,210.'"
+        context: "Narration matches the rows."
+        expected: negative
+
+  - id: query-retry-loop
+    name: Query Retry Loop
+    description: |
+      The agent burned an excessive number of spans regenerating and
+      re-running failing SQL instead of stopping to report the error.
+      Tune the threshold to your agent's normal plan length.
+    severity: medium
+    detection:
+      type: metric_threshold
+      metric: span_count
+      threshold: 30
+      operator: ">"
+
+clustering:
+  strategy: per_mode_embedding
+  embedding_model: text-embedding-3-small
+  similarity_threshold: 0.82
+  min_cluster_size: 3
+
+triage:
+  auto_post_threshold: never
+  default_severity_to_tracker:
+    critical: P1
+    high: P2
+    medium: P3
+    low: P4

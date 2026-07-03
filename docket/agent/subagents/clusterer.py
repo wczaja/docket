@@ -59,14 +59,7 @@ async def cluster_per_mode(
         rubric.clustering.min_cluster_size if rubric.clustering else _DEFAULT_MIN_CLUSTER_SIZE
     )
     modes_by_id = {m.id: m for m in rubric.modes}
-
-    positives_by_mode: dict[str, list[Classification]] = {}
-    for c in classifications:
-        if not c.positive or c.error is not None:
-            continue
-        if c.mode_id not in modes_by_id:
-            continue
-        positives_by_mode.setdefault(c.mode_id, []).append(c)
+    positives_by_mode = _positives_by_mode(classifications, modes_by_id)
 
     clusters: list[Cluster] = []
     for mode_id, positives in positives_by_mode.items():
@@ -94,6 +87,54 @@ async def cluster_per_mode(
         labels = _hdbscan_labels(embeddings, min_size=min_size, threshold=threshold)
         clusters.extend(_build_clusters(mode, positives, excerpts, labels, min_size))
     return clusters
+
+
+def cluster_mode_only(
+    classifications: list[Classification],
+    *,
+    rubric: Rubric,
+    traces_by_id: dict[str, OpenInferenceTrace] | None = None,
+) -> list[Cluster]:
+    """One cluster per mode containing every positive — no embeddings needed.
+
+    The deliberately lossy fallback behind `--clustering mode-only`: it
+    trades sub-pattern separation within a mode for zero embedding-provider
+    requirements, so a single-API-key deployment still gets one draft per
+    firing failure mode. `min_cluster_size` still gates drafting, and the
+    representative is still the highest-confidence member.
+    """
+    min_size = (
+        rubric.clustering.min_cluster_size if rubric.clustering else _DEFAULT_MIN_CLUSTER_SIZE
+    )
+    modes_by_id = {m.id: m for m in rubric.modes}
+    clusters: list[Cluster] = []
+    for mode_id, positives in _positives_by_mode(classifications, modes_by_id).items():
+        if len(positives) < min_size:
+            continue
+        mode = modes_by_id[mode_id]
+        # Same redaction choke point as the embedding path: excerpts become
+        # `representative_excerpt` and flow into drafts, reports, and evals.
+        excerpts = [
+            redact(_text_for(c, traces_by_id.get(c.trace_id) if traces_by_id else None))
+            for c in positives
+        ]
+        clusters.extend(_build_clusters(mode, positives, excerpts, [0] * len(positives), min_size))
+    clusters.sort(key=lambda c: (c.mode_id, c.cluster_id))
+    return clusters
+
+
+def _positives_by_mode(
+    classifications: list[Classification],
+    modes_by_id: dict[str, Mode],
+) -> dict[str, list[Classification]]:
+    positives_by_mode: dict[str, list[Classification]] = {}
+    for c in classifications:
+        if not c.positive or c.error is not None:
+            continue
+        if c.mode_id not in modes_by_id:
+            continue
+        positives_by_mode.setdefault(c.mode_id, []).append(c)
+    return positives_by_mode
 
 
 def _text_for(

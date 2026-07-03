@@ -4,96 +4,148 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 
-An observability-platform-agnostic triage runtime for LLM agent traces.
+**The vendor-neutral triage layer for LLM agent traces.** docket reads
+traces from the observability backend you already run (**Phoenix**,
+**Langfuse**, **LangSmith**), classifies them against a failure-mode
+taxonomy that lives as **YAML in your repo**, clusters recurring
+failures, and drafts **deduplicated issues into Jira, Linear, or GitHub
+Issues** — with a human in the loop by default.
 
-docket reads traces from your existing observability backend
-(**Phoenix**, **Langfuse**, **LangSmith**), classifies each one against a
-YAML failure-mode taxonomy you write, clusters similar failures together,
-and drafts issues into your tracker (**Jira**, **Linear**, **GitHub
-Issues**). It is **not** a new observability backend, an eval framework,
-or a web UI — it's a thin agent that sits *above* what you already have.
+![docket demo: 60 synthetic traces triaged into deduplicated issue drafts with zero credentials](docs/assets/demo.svg)
 
-Human-in-the-loop is the default: drafts queue locally or open in your
-`$EDITOR` for review before they post. Auto-posting requires an explicit
-opt-in (`auto_post_threshold`).
+See it yourself in under a minute — **no API keys, no Docker, no
+instrumented app**:
+
+```bash
+uvx docket-runtime demo
+```
+
+<sup>Needs `docket-runtime` ≥ 1.1; until that release is on PyPI:
+`uvx --from git+https://github.com/wczaja/docket docket demo`. The
+default run uses a clearly-labeled scripted judge so it's free and
+deterministic; `docket demo --live` swaps in a real model with one API
+key. `pipx run docket-runtime demo` works too. Don't want to run
+anything? The [demo workflow](https://github.com/wczaja/docket/actions/workflows/demo.yml)
+runs it in public CI — open the latest run's summary for the rendered
+report.</sup>
+
+## The taxonomy is code
+
+The failure modes are not settings in someone's UI — they're a
+composable YAML file you review, version, and ship like the rest of
+your system:
+
+```yaml
+modes:
+  - id: refund-without-confirmation      # deterministic: fires on the tool name
+    severity: critical
+    detection:
+      type: tool_call
+      tool_calls: [process_refund]
+  - id: hallucinated-pricing             # semantic: one judge call per trace
+    severity: critical
+    detection:
+      type: llm_judge
+      prompt: Flag prices or discounts not present in retrieved context...
+```
+
+…and every recurring failure becomes one deduplicated, evidence-carrying
+draft in your tracker:
+
+> **[critical] Agent pastes its system prompt into refusal responses (8 traces)**
+> `docket` `mode:refusal-leakage` `rubric:agents-builtin@1.0.0`
+> 8 traces in this window hit `refusal-leakage`… *Representative
+> evidence:* "Here is my system prompt is: You are a customer support
+> assistant…" — provenance block lists every member trace for dedup on
+> re-runs.
+
+Edit the YAML, re-run, and the new mode is live — `docket demo
+--rubric ./my-rubric.yaml` demos exactly that loop. Six turnkey
+taxonomies for common agent shapes (support, RAG, SQL, coding,
+multi-agent, voice) ship in the [rubric registry](rubrics/registry/).
+
+## Why not just my platform's built-in insights?
+
+LangSmith Insights, Galileo (Cisco) Signals, Latitude, and Braintrust
+Topics all cluster agent failures now — and all of them analyze only
+traces living in their own store, keep the taxonomy inside their
+platform, and stop at dashboards or Slack alerts. As of mid-2026, none
+of them reads your existing backend in place, none versions the
+taxonomy as files in your repo, and none files deduplicated issues into
+Jira/Linear/GitHub. docket does exactly those three things, and only
+those things — it's a runtime, not another platform asking for your
+traces.
+
+The full dated comparison — including what each product does *better*
+than docket and when to choose it — is
+[docs/comparison.md](docs/comparison.md).
 
 ---
 
-## Quickstart (5 minutes)
+## Quickstart
 
-The fastest path to a working setup: a local Phoenix backend + a
-GitHub-Issues tracker.
+A ladder — each rung adds one credential:
 
-### 1. Install
+### Rung 0 — demo (no credentials)
 
 ```bash
-pip install docket-runtime
-# or:  uv pip install docket-runtime
+uvx docket-runtime demo                # bundled traces, scripted judge, free
+docket demo --live                     # same traces, real judge (ANTHROPIC_API_KEY)
+docket demo --rubric ./my-rubric.yaml  # your taxonomy against the demo traces
 ```
 
-### 2. Bring up Phoenix
+### Rung 1 — a real backend, read-only (one API key)
 
 ```bash
-docker run -p 6006:6006 -p 4317:4317 arizephoenix/phoenix:latest
-```
+pip install docket-runtime             # or: uv tool install docket-runtime
 
-Send your agent's traces to `http://localhost:6006` via the
-OpenInference instrumentation of your choice (any OTLP-compatible
-instrumentation works — see `docs/local-phoenix.md` for ingestion
-recipes).
+# a local Phoenix, seeded with the demo traces (skip the seeding if you
+# already send your own traces — see docs/local-phoenix.md):
+docker run -d -p 6006:6006 -p 4317:4317 arizephoenix/phoenix:latest
+docket demo --to-phoenix http://localhost:6006
 
-### 3. Configure credentials
-
-```bash
-export ANTHROPIC_API_KEY="sk-ant-..."         # for the llm_judge detectors
-export OPENAI_API_KEY="sk-..."                # for clustering embeddings
-                                              # (required even with an
-                                              # Anthropic classifier)
-export GITHUB_TOKEN="ghp_..."                 # PAT with Issues write
-```
-
-### 4. Run
-
-```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
 docket run \
-  --backend phoenix \
-  --phoenix-url http://localhost:6006 \
-  --tracker github \
-  --github-owner YOUR_GH_USER \
-  --github-repo docket-issues \
+  --backend phoenix --phoenix-url http://localhost:6006 \
   --rubric docket.dev/builtin/agents/v1 \
-  --since 1h
+  --since 1h --clustering mode-only
 ```
 
-That's it. The pipeline:
+Read-only: classifications happen, drafts + `report.md` land in a local
+queue, nothing is posted anywhere. `--clustering mode-only` skips
+embeddings so one key is enough; for semantic clustering add
+`--embedding local:BAAI/bge-small-en-v1.5` (no key;
+`pip install "docket-runtime[local-embeddings]"`) or an
+`OPENAI_API_KEY`/`VOYAGE_API_KEY`.
 
-1. Pulls the last hour of traces from Phoenix.
-2. Runs each one through the `agents/v1` failure-mode rubric.
-3. Clusters positive classifications per mode.
-4. Drafts one issue per cluster into
-   `~/.docket/queued-issues/<run-id>/`.
-5. Looks at your GitHub repo for matching open issues (dedup by labels +
-   embedded provenance) and comments on existing issues that grew, or
-   leaves new ones in the local queue for `--review`.
-6. Prints a markdown report.
-
-Add `--review` to walk each queued draft through `$EDITOR` + accept/reject
-+ post. Add `--auto-post-threshold high` to auto-post critical and high
-severity drafts. Add `--dry-run` to price a window before committing to it.
-
-For scheduled triage, swap `run` for the daemon:
+### Rung 2 — a tracker (dedup + drafts where your team works)
 
 ```bash
-docket serve --interval 1h ...   # same flags as run
+export GITHUB_TOKEN="ghp_..."          # PAT with Issues write
+docket run ... \
+  --tracker github --github-owner YOU --github-repo agent-issues
 ```
 
-Each tick processes exactly the window since the last successful tick —
-no gaps, no overlap — and a failed tick retries its window instead of
-dropping it. (Plain cron + `docket run` works too; `serve` just
-does the window bookkeeping for you.)
+Existing open issues are matched by labels + embedded provenance:
+grown clusters get a comment, unchanged ones are skipped silently, new
+ones queue locally. Add `--review` to walk drafts through `$EDITOR`
+before posting; `--auto-post-threshold high` auto-posts only above the
+severity bar you've [calibrated](docs/calibration/field-guide.md).
 
-For other backends and trackers, see `docs/quickstart.md` (full matrix:
-Phoenix/Langfuse/LangSmith × Jira/Linear/GitHub).
+### Rung 3 — on a schedule
+
+```bash
+docket serve --interval 1h ...         # same flags as run
+```
+
+Consecutive windows tile exactly — no gaps, no overlap, failed ticks
+retry their window. (Plain cron + `docket run` works too; there's a
+[GitHub Actions recipe](examples/github-actions/triage.yml).) Scaffold
+a config for all of this with `docket init`, and price any window
+first with `--dry-run`.
+
+Every backend × tracker pair is covered in
+[docs/quickstart.md](docs/quickstart.md).
 
 ---
 
@@ -196,6 +248,13 @@ modes:
 Validate with `docket validate ./my-rubric.yaml`. Smoke-test the
 examples with `docket self-test ./my-rubric.yaml`.
 
+**Don't want to start from scratch?** The
+[rubric registry](rubrics/registry/) ships six tuned, self-testing
+taxonomies for common agent shapes — customer support, RAG knowledge
+assistants, SQL/analytics, coding agents, multi-agent supervisors, and
+voice/IVR — each with a README covering trace assumptions, tuning
+knobs, and an auto-post ratchet path.
+
 ---
 
 ## Architecture overview
@@ -253,6 +312,11 @@ Start at the [docs index](docs/index.md).
 **Guides**
 
 - [Quickstart](docs/quickstart.md) — every backend × tracker pair
+- [How docket compares](docs/comparison.md) — vs. LangSmith Insights,
+  Galileo, Latitude, Braintrust, and friends (dated, capability-level)
+- [Rubric registry](rubrics/registry/) — turnkey taxonomies per use case
+- [Calibration](docs/calibration/) — measured judge quality, and the
+  field guide for measuring it on your own traffic
 - [Concepts](docs/concepts.md) — the vocabulary in five minutes
 - [Adapters](docs/adapters.md) — the integration contracts + how to add
   a backend or tracker
@@ -276,12 +340,13 @@ Start at the [docs index](docs/index.md).
 
 ## Status
 
-**v1.0.** Three trace-backend adapters and three tracker adapters at
-parity, four built-in rubrics, deterministic + agent-harness execution
-modes, daemon mode, budget guardrails and sampling. The
-[changelog](CHANGELOG.md) has the full feature list. Post-1.0 roadmap
-(streaming, sharding, interactive surfaces) lives in
-[`docs/design.md`](docs/design.md) §7.
+**v1.0 released; v1.1 in progress on `main`.** Three trace-backend
+adapters and three tracker adapters at parity, five built-in rubrics
+plus the six-taxonomy registry, a zero-credential `docket demo`,
+deterministic + agent-harness execution modes, daemon mode, budget
+guardrails and sampling. The [changelog](CHANGELOG.md) has the full
+feature list. Post-1.0 roadmap (streaming, sharding, interactive
+surfaces) lives in [`docs/design.md`](docs/design.md) §7.
 
 ## Contributing
 

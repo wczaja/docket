@@ -1,0 +1,95 @@
+# Registry rubric: multi-agent supervisor.
+# Turnkey starting point for supervisor/specialist topologies. This is
+# mostly composition: it merges the three builtin taxonomies that cover
+# coordination (mast/v1 — the research-derived MAST failure modes),
+# routing (routing/v1), and orchestration state (multi-agent/v1), then
+# adds the two supervisor-specific modes the builtins leave out.
+# Everything here is synthetic.
+#
+# The mast/v1 judge prompts are the ones the calibration harness
+# measures against human labels — see docs/calibration/ for per-mode
+# precision/recall and how to tune them on your own traffic.
+#
+#   docket validate rubrics/registry/multi-agent-supervisor/v1/rubric.yaml
+#   docket self-test rubrics/registry/multi-agent-supervisor/v1/rubric.yaml
+apiVersion: docket.dev/v1
+kind: Rubric
+metadata:
+  name: registry-multi-agent-supervisor
+  version: 1.0.0
+  description: |
+    Coordination failures for supervisor/specialist agent systems:
+    the MAST taxonomy subset (step repetition, history loss,
+    termination unawareness, conversation resets, missing
+    clarification, ignored input, action-reasoning mismatch), routing
+    failures (wrong skill, capability mismatch, dead ends,
+    oscillation), orchestration-state failures (handoff context loss,
+    conflicting instructions, role drift, shared-memory corruption),
+    plus silent subagent failures and token blowouts.
+
+imports:
+  - docket.dev/builtin/mast/v1
+  - docket.dev/builtin/routing/v1
+  - docket.dev/builtin/multi-agent/v1
+
+modes:
+  - id: silent-subagent-failure
+    name: Silent Subagent Failure
+    description: |
+      A specialist errored or returned nothing usable, and the
+      supervisor reported overall success anyway — the failure is
+      swallowed instead of surfaced or retried. The single most
+      trust-destroying multi-agent failure: the user sees a confident
+      answer built on a missing part.
+    severity: critical
+    detection:
+      type: llm_judge
+      prompt: |
+        Inspect the subagent (specialist) invocations in the trace:
+        errors, empty results, or explicit failure messages. Then read
+        the supervisor's final response. Return positive=true if any
+        specialist failed or returned unusable output AND the final
+        response neither acknowledges the gap nor shows a retry or
+        fallback — it simply presents a complete-sounding answer.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          swallowed_failure: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "research-specialist returned: ERROR rate_limited. Supervisor final answer: 'Here's the full competitive analysis you asked for: ...' (no research content present, no caveat)."
+        context: "A required specialist failed; the answer claims completeness with no acknowledgment or retry."
+        expected: positive
+      - trace_excerpt: "research-specialist returned: ERROR rate_limited. Supervisor retried once, then answered: 'The market-data source is rate-limited right now; here's the analysis minus live figures, marked accordingly.'"
+        context: "Failure surfaced, retried, and caveated in the final answer."
+        expected: negative
+
+  - id: token-budget-blowout
+    name: Token Budget Blowout
+    description: |
+      The whole run consumed far more tokens than a healthy episode of
+      this system should — the aggregate symptom of delegation
+      ping-pong, context re-sending, or specialists re-reading the
+      world each turn. Tune the threshold to ~5x your P95 episode.
+    severity: medium
+    detection:
+      type: metric_threshold
+      metric: total_tokens
+      threshold: 150000
+      operator: ">"
+
+clustering:
+  strategy: per_mode_embedding
+  embedding_model: text-embedding-3-small
+  similarity_threshold: 0.82
+  min_cluster_size: 3
+
+triage:
+  auto_post_threshold: never
+  default_severity_to_tracker:
+    critical: P1
+    high: P2
+    medium: P3
+    low: P4

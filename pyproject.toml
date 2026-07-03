@@ -64,6 +64,8 @@ Documentation = "https://github.com/wczaja/docket/blob/main/docs/quickstart.md"
 Changelog = "https://github.com/wczaja/docket/releases"
 
 [project.optional-dependencies]
+# Local ONNX embeddings for clustering (no API key): `--embedding local:...`
+local-embeddings = ["fastembed>=0.3,<1"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
@@ -135,7 +137,7 @@ module = ["jsonschema.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["sklearn.*", "deepagents.*", "openinference.*", "phoenix.*"]
+module = ["sklearn.*", "deepagents.*", "openinference.*", "phoenix.*", "fastembed.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

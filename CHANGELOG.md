@@ -8,6 +8,44 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **`docket demo`** — the full pipeline (classify → cluster → draft →
+  report) over 60 bundled synthetic traces with an in-memory backend:
+  no API keys, no Docker, no instrumented app. LLM-judge modes run
+  under a clearly-labeled deterministic scripted judge (`--live` swaps
+  in a real provider with one key); deterministic detectors run for
+  real either way. `--rubric` points it at your own taxonomy;
+  `--to-phoenix URL` ingests the demo traces into a real Phoenix via
+  OTLP instead. The fixture is also available to `run`/`serve` as
+  `--backend demo`. A scheduled `demo` workflow runs it in public CI
+  with the report rendered in the job summary.
+- **Single-API-key clustering paths**: `--clustering mode-only` (one
+  cluster per firing mode; no embedding provider at all) and a
+  `local:` embedding provider (fastembed/ONNX, no key) behind the new
+  `local-embeddings` extra. `--embedding` and `--clustering` are
+  available on both `run` and `serve` (serve previously had no
+  embedding override), and the missing-OPENAI_API_KEY error now names
+  all three ways out.
+- **`docket init`** — interactive `docket.yaml` scaffolder (backend,
+  tracker, rubric, auto-post threshold; secrets written as `${ENV_VAR}`
+  references; refuses to overwrite without `--force`).
+- **Rubric registry** (`rubrics/registry/`): six turnkey, self-testing
+  taxonomies — support-agent, rag-knowledge-assistant,
+  sql-analytics-agent, coding-agent, multi-agent-supervisor,
+  voice-ivr-agent — each with a README (trace assumptions, tuning
+  knobs, auto-post ratchet path). CI enforces the registry quality
+  gate: every `llm_judge` mode ships a positive and a negative
+  example, and the eval-rubrics workflow validates + self-tests
+  registry rubrics alongside builtins.
+- **Docs**: `docs/comparison.md` (dated, capability-level comparison
+  with LangSmith Insights/Engine, Galileo/Cisco Signals, Latitude,
+  Phoenix, Traceloop, Braintrust, and the eval-framework category);
+  `docs/calibration/` (evidence tiers, the staged MAST/MAD live-run
+  procedure with a publishing checklist, and a field guide for
+  measuring per-mode false-positive rates on your own traffic); README
+  reworked around an animated demo recording
+  (`scripts/render_demo_svg.py` regenerates it from a real run) and a
+  credential-ladder quickstart.
+
 - **Builtin rubric `mast/v1`**: seven multi-agent coordination failure
   modes adapted from the MAST taxonomy (Cemri et al., "Why Do Multi-Agent
   LLM Systems Fail?", arXiv:2503.13657) — step repetition,
@@ -23,6 +61,13 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   plus disagreements, for iterating on the judge prompts. Maintainer tool;
   ships no MAD data by default — the dataset (CC-BY-4.0) is fetched/provided
   by the user, with attribution. Documented in `docs/tuning-mast-judges.md`.
+
+### Fixed
+
+- The deterministic pipeline now actually writes `report.md` next to
+  the queued drafts, as the quickstart and `agent/report.py` docstring
+  always claimed (previously the report was only printed to stdout;
+  only the deep-agent mode persisted it, in its virtual filesystem).
 
 ## [1.0.0] - 2026-06-12
 

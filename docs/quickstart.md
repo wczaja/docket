@@ -1,23 +1,50 @@
 # Quickstart
 
-This guide walks through every supported backend × tracker pair, the
-`--review` flow, and the `auto_post_threshold` gate. If you only need
-the 5-minute path, the [README](../README.md) covers Phoenix + GitHub
-Issues end to end; this document is for picking your own combination.
+This guide is a ladder — each rung adds exactly one credential — and
+then a matrix: every supported backend × tracker pair, the `--review`
+flow, and the `auto_post_threshold` gate. If you only need the
+condensed path, the [README](../README.md) covers rungs 0–3 in one
+screen; this document is for picking your own combination.
 
-## Prerequisites
+## Rung 0 — the demo (no credentials, no Docker)
 
 ```bash
-pip install docket-runtime          # or: uv pip install docket-runtime
+uvx docket-runtime demo          # or: pipx run docket-runtime demo
+```
+
+Runs the real pipeline — classify → cluster → draft → report — over 60
+bundled synthetic traces with a clearly-labeled scripted judge. Free,
+offline, deterministic. Useful variants:
+
+```bash
+docket demo --live                          # real judge, one API key
+docket demo --rubric ./my-rubric.yaml       # your taxonomy, same traces
+docket demo --to-phoenix http://localhost:6006   # seed a real Phoenix instead
+```
+
+## Prerequisites for real runs
+
+```bash
+pip install docket-runtime          # or: uv tool install docket-runtime
 
 export ANTHROPIC_API_KEY=...      # for llm_judge detectors (or OPENAI_API_KEY)
-export OPENAI_API_KEY=...         # required for clustering even when the
-                                  # classifier is Anthropic (embeddings are
-                                  # OpenAI-only until other providers ship one)
+```
+
+One key is enough. Clustering defaults to OpenAI embeddings, but three
+paths avoid the second vendor account:
+
+```bash
+--clustering mode-only                        # no embeddings at all (lossy:
+                                              # one cluster per firing mode)
+--embedding local:BAAI/bge-small-en-v1.5      # local ONNX, no key:
+                                              # pip install "docket-runtime[local-embeddings]"
+--embedding voyage:voyage-3.5-lite            # Voyage, with VOYAGE_API_KEY
 ```
 
 Python 3.11 or newer. No system services are required beyond the
-backend / tracker of your choice.
+backend / tracker of your choice. `docket init` scaffolds a
+`docket.yaml` interactively if you'd rather answer four prompts than
+compose flags.
 
 ## Configure a trace backend
 
@@ -37,8 +64,10 @@ docket run \
   ...
 ```
 
-See [docs/local-phoenix.md](local-phoenix.md) for ingestion via OTLP and
-the OpenInference instrumentation packages.
+No instrumented app yet? `docket demo --to-phoenix
+http://localhost:6006` seeds the demo traces so the pipeline has
+something real to chew on. See [docs/local-phoenix.md](local-phoenix.md)
+for ingestion via OTLP and the OpenInference instrumentation packages.
 
 ### Langfuse
 

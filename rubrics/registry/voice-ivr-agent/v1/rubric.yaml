@@ -1,0 +1,167 @@
+# Registry rubric: voice / IVR agent.
+# Turnkey starting point for phone and voice assistants whose traces
+# carry the conversation as transcribed turns (ASR text in, TTS text
+# out) plus tool calls. Everything here is synthetic. Voice-specific
+# constraint worth internalizing: the response text is *spoken*, so
+# formatting artifacts and unreadable strings are real failures, not
+# cosmetics.
+#
+#   docket validate rubrics/registry/voice-ivr-agent/v1/rubric.yaml
+#   docket self-test rubrics/registry/voice-ivr-agent/v1/rubric.yaml
+apiVersion: docket.dev/v1
+kind: Rubric
+metadata:
+  name: registry-voice-ivr-agent
+  version: 1.0.0
+  description: |
+    Failure modes for a voice/IVR agent: refused human handoffs,
+    payments taken without spoken confirmation, callers forced to
+    repeat themselves, unspeakable TTS output, wrong-language replies,
+    and dead-air latency. Imports the generic agents/v1 baseline.
+
+imports:
+  - docket.dev/builtin/agents/v1
+
+modes:
+  - id: failed-human-handoff
+    name: Failed Human Handoff
+    description: |
+      Caller asked for a human and the agent neither transferred nor
+      acknowledged the request. On voice this compounds fast — the
+      caller is trapped in the loop in real time.
+    severity: critical
+    detection:
+      type: llm_judge
+      prompt: |
+        Determine whether the caller asked to speak to a human
+        (operator, agent, representative, "real person"). If so, check
+        whether the assistant invoked a transfer/escalation tool or at
+        least acknowledged the request with a concrete path to a human.
+        Return positive=true when the request was ignored or deflected.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          caller_request: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "Caller: 'Operator. OPERATOR. I need a real person.' Agent: 'I can help with billing, orders, or returns. Which would you like?'"
+        context: "No transfer tool call in the trace; the request for a human is never acknowledged."
+        expected: positive
+      - trace_excerpt: "Caller: 'Can I talk to a person?' Agent: 'Of course — transferring you now.' Tool call: transfer_to_agent(queue='support')"
+        context: "Transfer tool invoked immediately."
+        expected: negative
+
+  - id: payment-without-spoken-confirmation
+    name: Payment Without Spoken Confirmation
+    description: |
+      A payment tool fired without the transcript showing an explicit
+      read-back-and-confirm turn (amount + assent) before it.
+      Deterministic on the tool name; rename to match your telephony
+      stack.
+    severity: critical
+    detection:
+      type: tool_call
+      tool_calls:
+        - charge_card
+        - process_payment
+        - initiate_transfer
+
+  - id: caller-repetition-ignored
+    name: Caller Forced to Repeat
+    description: |
+      The caller re-supplied information they already gave (account
+      number, name, issue) because the agent lost or ignored it. The
+      voice-channel version of conversation-history loss.
+    severity: high
+    detection:
+      type: llm_judge
+      prompt: |
+        Look for information the caller provided earlier in the call
+        (identifiers, names, the stated problem) that the assistant
+        later asked for again, forcing the caller to repeat themselves.
+        Return positive=true if the assistant re-asked for something
+        already given in this same call.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          repeated_item: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "Caller (turn 2): 'Account 55-8812.' ... Agent (turn 7): 'Could you give me your account number?'"
+        context: "The account number was provided five turns earlier in the same call."
+        expected: positive
+      - trace_excerpt: "Caller (turn 2): 'Account 55-8812.' ... Agent (turn 7): 'Thanks — pulling up account 55-8812 now.'"
+        context: "Earlier-provided information is reused, not re-asked."
+        expected: negative
+
+  - id: unspeakable-output
+    name: Unspeakable TTS Output
+    description: |
+      The response contains artifacts that cannot be spoken sensibly:
+      markdown syntax, code fences, raw URLs, or bullet formatting.
+      Deterministic and free — this one regex catches a whole class of
+      "the bot read asterisk asterisk out loud" tickets.
+    severity: medium
+    detection:
+      type: regex
+      pattern: "(```|\\*\\*|\\]\\(https?://|https?://[^ ]{20,}|^[-*] |\\n[-*] )"
+
+  - id: wrong-language-response
+    name: Wrong-Language Response
+    description: |
+      The caller's language is identifiable from their turns and the
+      agent answered in a different one (locale routing or ASR
+      language-detection failure upstream).
+    severity: high
+    detection:
+      type: llm_judge
+      prompt: |
+        Identify the language the caller is speaking from their
+        transcribed turns. Return positive=true if the assistant's
+        response is in a different language than the caller's, unless
+        the caller explicitly asked for that language.
+      output_schema:
+        type: object
+        required: [positive, confidence]
+        properties:
+          positive: {type: boolean}
+          caller_language: {type: [string, "null"]}
+          confidence: {type: number, minimum: 0, maximum: 1}
+    examples:
+      - trace_excerpt: "Caller: '¿Cuál es el estado de mi pedido?' Agent: 'Your order shipped yesterday and arrives Tuesday.'"
+        context: "Caller speaks Spanish; response is English; no language request was made."
+        expected: positive
+      - trace_excerpt: "Caller: '¿Cuál es el estado de mi pedido?' Agent: 'Su pedido fue enviado ayer y llega el martes.'"
+        context: "Response matches the caller's language."
+        expected: negative
+
+  - id: dead-air
+    name: Dead Air
+    description: |
+      End-to-end turn latency long enough that a caller hears silence
+      and assumes the line dropped. 15s is a conservative ceiling for
+      a single trace; tighten it once you trust the signal.
+    severity: medium
+    detection:
+      type: metric_threshold
+      metric: latency_ms
+      threshold: 15000
+      operator: ">"
+
+clustering:
+  strategy: per_mode_embedding
+  embedding_model: text-embedding-3-small
+  similarity_threshold: 0.82
+  min_cluster_size: 3
+
+triage:
+  auto_post_threshold: never
+  default_severity_to_tracker:
+    critical: P1
+    high: P2
+    medium: P3
+    low: P4
