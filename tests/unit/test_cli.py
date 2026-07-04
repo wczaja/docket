@@ -335,3 +335,14 @@ def test_run_rejects_bad_duration(tmp_path: Path) -> None:
     )
     assert result.exit_code != 0
     assert "duration" in result.output.lower()
+
+
+def test_console_script_alias_matches_package_name() -> None:
+    """`uvx <package>` and `pipx run <package>` execute the script named
+    after the package, so the README one-liners only work if a
+    `docket-runtime` alias exists alongside `docket`."""
+    from importlib.metadata import entry_points
+
+    scripts = {ep.name: ep.value for ep in entry_points(group="console_scripts")}
+    assert scripts.get("docket") == "docket.cli:main"
+    assert scripts.get("docket-runtime") == "docket.cli:main"

@@ -79,6 +79,10 @@ dev = [
 
 [project.scripts]
 docket = "docket.cli:main"
+# Alias matching the PyPI package name, so the documented one-liners
+# (`uvx docket-runtime demo`, `pipx run docket-runtime demo`) work:
+# both tools run the executable named after the package by default.
+docket-runtime = "docket.cli:main"
 docket-adapter-phoenix = "docket.mcp_servers.adapter_phoenix:cli_main"
 docket-adapter-langfuse = "docket.mcp_servers.adapter_langfuse:cli_main"
 docket-adapter-langsmith = "docket.mcp_servers.adapter_langsmith:cli_main"
