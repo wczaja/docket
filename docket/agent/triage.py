@@ -39,7 +39,9 @@ from docket.agent.subagents.drafter import DEFAULT_QUEUE_DIR, draft_issues
 from docket.agent.subagents.poster import (
     AutoPostThreshold,
     DedupOutcome,
+    LineageMatcher,
     dedup_drafts,
+    match_mode_lineage,
 )
 from docket.errors import BackendError, BudgetExceededError
 from docket.llm import build_embedding_provider, build_provider
@@ -127,6 +129,7 @@ async def run_triage_pipeline(
     max_estimated_cost_usd: float | None = None,
     emit_evals_dir: Path | None = None,
     clustering: str = "embedding",
+    lineage_matcher: LineageMatcher | None = match_mode_lineage,
 ) -> TriageResult:
     """Run the full Phase 5 pipeline: fetch -> classify -> annotate ->
     cluster -> draft -> report.
@@ -159,6 +162,11 @@ async def run_triage_pipeline(
       - `clustering`: "embedding" (default; per-mode HDBSCAN over excerpt
         embeddings) or "mode-only" (one cluster per firing mode; needs no
         embedding provider — the single-API-key operating mode).
+      - `lineage_matcher`: how tracker dedup links a draft to an open issue
+        when neither its cluster_id nor its traces match — the cross-window
+        case, since consecutive windows share no traces. The default keeps
+        one open issue per (mode, rubric_version); None restores
+        cluster-only dedup. See `docket.agent.subagents.poster`.
     """
     if clustering not in ("embedding", "mode-only"):
         raise ValueError(f"clustering must be 'embedding' or 'mode-only', got {clustering!r}")
@@ -415,9 +423,11 @@ async def run_triage_pipeline(
         )
 
     # 5b. Dedup against tracker (Phase 8): for drafts matching an existing
-    # open issue, comment if new members appeared; for new issues, auto-post
-    # when severity meets `auto_post_threshold` and skip otherwise (the CLI's
-    # `--review` mode handles `needs_create` outcomes interactively).
+    # open issue — by cluster, by shared traces, or by lineage when the
+    # failure recurs in a later window — comment if new members appeared;
+    # for new issues, auto-post when severity meets `auto_post_threshold`
+    # and skip otherwise (the CLI's `--review` mode handles `needs_create`
+    # outcomes interactively).
     dedup_outcomes: list[DedupOutcome] = []
     if tracker is not None and drafts:
         log.info("deduplicating %d drafts against tracker", len(drafts))
@@ -425,6 +435,8 @@ async def run_triage_pipeline(
             drafts,
             tracker=tracker,
             auto_post_threshold=auto_post_threshold,
+            lineage_matcher=lineage_matcher,
+            window=(since, until),
         )
         log.info("tracker dedup complete (%d outcomes)", len(dedup_outcomes))
 

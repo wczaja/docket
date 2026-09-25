@@ -209,7 +209,10 @@ dropped (a persistently failing window will eventually hit the trace cap
 loudly; that's intentional). Config and credential errors exit
 immediately with code 1. Stop with Ctrl-C / SIGTERM. Each tick gets a
 fresh window-derived `run_id`, so annotations and tracker dedup behave
-exactly as if cron invoked `run`.
+exactly as if cron invoked `run`. Ticks share no traces, so a failure
+that recurs in a later tick is matched to its open issue by lineage
+(same mode and rubric version) and lands there as a comment instead of
+a new issue; see [concepts](concepts.md).
 
 ---
 

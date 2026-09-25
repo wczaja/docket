@@ -246,6 +246,28 @@ async def test_list_open_issues_page_cap_logs_warning(
     assert calls == 20  # _MAX_PAGES
     assert len(issues) == 20
     assert any("dedup may miss matches" in r.message for r in caplog.records)
+    listing = await adapter.list_open_issues_v2()
+    assert listing.truncated is True
+    assert listing.page_limit == 20
+
+
+async def test_list_open_issues_v2_is_complete_when_pages_run_out() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "issues": {
+                        "nodes": [_node("n-1", "AGT-1")],
+                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                    }
+                }
+            },
+        )
+
+    listing = await _make_adapter(handler).list_open_issues_v2(filter={"labels": ["docket"]})
+    assert listing.truncated is False
+    assert [i.key for i in listing.issues] == ["AGT-1"]
 
 
 async def test_list_open_issues_returns_empty_when_no_nodes() -> None:

@@ -5,7 +5,8 @@ from datetime import datetime
 from typing import Any
 
 from docket.models.classification import Annotation
-from docket.models.issue import Issue, IssueDraft, IssuePatch
+from docket.models.issue import Issue, IssueDraft, IssuePatch, IssueProvenance
+from docket.models.listing import IssueListing
 from docket.models.trace import OpenInferenceTrace
 
 
@@ -93,9 +94,12 @@ class Tracker(ABC):
     """Read + write interface implemented by each issue-tracker adapter.
 
     Per design §5.2 the contract is five operations: list / search / create /
-    update / comment. The pipeline's dedup loop calls `list_open_issues` with
-    the standard label set (`docket`, `mode:<id>`, `rubric:<id>@<ver>`)
-    to decide whether to create a new issue or comment on an existing one.
+    update / comment. The pipeline's dedup loop calls `list_open_issues_v2`
+    with the standard label set (`docket`, `mode:<id>`, `rubric:<id>@<ver>`)
+    to decide whether to create a new issue or comment on an existing one,
+    and `update_provenance` to record what it reported. Both have defaults
+    built on the five operations; adapters override them to report listing
+    truncation and to keep provenance writes lossless.
     """
 
     @abstractmethod
@@ -109,6 +113,21 @@ class Tracker(ABC):
         meaning "all of these labels are present"; this is the dedup loop's
         sole requirement on the backend.
         """
+
+    async def list_open_issues_v2(
+        self,
+        filter: dict[str, Any] | None = None,
+    ) -> IssueListing:
+        """`list_open_issues` plus the loud-truncation flag the dedup loop reads.
+
+        Adapters that paginate MUST override this and set `truncated=True`
+        when they stop at their page ceiling with results still pending —
+        the poster then queues drafts that matched nothing rather than
+        auto-posting a possible duplicate. The default reports whatever
+        `list_open_issues` returns as complete, which is only honest for
+        trackers that return every match in one call.
+        """
+        return IssueListing(issues=await self.list_open_issues(filter))
 
     @abstractmethod
     async def search_issues(self, query: str, k: int = 10) -> list[Issue]:
@@ -129,6 +148,18 @@ class Tracker(ABC):
     @abstractmethod
     async def comment_on_issue(self, issue_id: str, comment: str) -> None:
         """Post a comment on an existing issue."""
+
+    async def update_provenance(self, issue: Issue, provenance: IssueProvenance) -> None:
+        """Replace the provenance block at the end of `issue`'s body.
+
+        The poster calls this to keep its dedup ledger on an issue it is
+        about to comment on. Everything else in the body must survive. The
+        default rewrites `issue.body` through `update_issue`, which is exact
+        for trackers that store bodies verbatim. Adapters whose `Issue.body`
+        is a lossy rendering (Jira Cloud's ADF) MUST override it to change
+        only the provenance.
+        """
+        await self.update_issue(issue.id, IssuePatch(body=provenance.replace_in_body(issue.body)))
 
     async def close(self) -> None:  # noqa: B027  -- intentional no-op default
         """Release any held resources. Default is a no-op."""

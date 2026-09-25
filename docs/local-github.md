@@ -90,8 +90,13 @@ auto_post_threshold: never
 - **Dedup** — the pipeline calls `GET /repos/{owner}/{repo}/issues` with
   `state=open` and `labels=` set to a comma-separated list of the
   standard label set. Each open candidate's body is parsed for the HTML
-  provenance comment, and a `cluster_id` match decides skip / comment /
-  needs_create.
+  provenance comment, and a match decides skip / comment / needs_create.
+  A candidate matches by `cluster_id`, by shared traces (a grown
+  cluster), or by lineage: the open issue for the same mode and rubric
+  version, which is how a recurrence in a later window finds its issue.
+  Before commenting, docket rewrites that provenance comment at the end
+  of the body (`PATCH /issues/{number}`) to record what it reported, so
+  re-runs don't repeat the comment.
 - **Auto-post** (`--auto-post-threshold ...`) — drafts whose severity
   meets the threshold are posted via `POST /issues` with the title,
   markdown body (including the provenance comment), and label set.

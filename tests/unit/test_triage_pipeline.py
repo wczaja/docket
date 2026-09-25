@@ -1,19 +1,20 @@
 """Tests for the full Phase 5 triage pipeline end-to-end (with mocks)."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import pytest
 
-from docket.adapters.base import TraceBackend
+from docket.adapters.base import TraceBackend, Tracker
 from docket.agent.triage import compute_run_id, run_triage_pipeline
 from docket.errors import BudgetExceededError, CredentialError
 from docket.llm.base import ModelProvider
 from docket.llm.embeddings import EmbeddingProvider
 from docket.models.classification import Annotation, Classification
+from docket.models.issue import Issue
 from docket.models.trace import OpenInferenceTrace, Span
 from docket.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
 
@@ -662,3 +663,104 @@ async def test_cost_gate_allows_deterministic_only_rubric(tmp_path: Path) -> Non
         max_estimated_cost_usd=0.000001,
     )
     assert result.run_report.trace_count == 1
+
+
+# --- cross-window tracker dedup ------------------------------------------------
+
+
+class _WindowedBackend(_FakeBackend):
+    """Serves each window's traces by its `since`, like tiled `serve` ticks."""
+
+    def __init__(self, by_window: dict[datetime, list[str]]) -> None:
+        super().__init__({tid: _trace(tid, "hello") for ids in by_window.values() for tid in ids})
+        self.by_window = by_window
+
+    async def list_traces(self, since, until=None, filter=None):  # type: ignore[no-untyped-def]
+        return list(self.by_window.get(since, []))
+
+
+class _MemoryTracker(Tracker):
+    """Stateful in-memory tracker: what one run writes, the next run reads."""
+
+    def __init__(self) -> None:
+        self.issues: dict[str, Issue] = {}
+        self.comments: list[tuple[str, str]] = []
+
+    async def list_open_issues(self, filter=None):  # type: ignore[no-untyped-def]
+        wanted = set((filter or {}).get("labels") or [])
+        return [i for i in self.issues.values() if wanted.issubset(i.labels)]
+
+    async def search_issues(self, query, k=10):  # type: ignore[no-untyped-def]
+        raise NotImplementedError
+
+    async def create_issue(self, draft):  # type: ignore[no-untyped-def]
+        key = f"AGT-{len(self.issues) + 1}"
+        issue = Issue(id=key, key=key, title=draft.title, body=draft.body, labels=draft.labels)
+        self.issues[key] = issue
+        return issue
+
+    async def update_issue(self, issue_id, patch):  # type: ignore[no-untyped-def]
+        updated = self.issues[issue_id].model_copy(update=patch.model_dump(exclude_none=True))
+        self.issues[issue_id] = updated
+        return updated
+
+    async def comment_on_issue(self, issue_id, comment):  # type: ignore[no-untyped-def]
+        self.comments.append((issue_id, comment))
+
+
+_W1 = datetime(2026, 9, 25, 10, tzinfo=UTC)
+_W2 = _W1 + timedelta(hours=1)
+_W3 = _W2 + timedelta(hours=1)
+
+
+async def _run_window(
+    tmp_path: Path,
+    backend: TraceBackend,
+    tracker: Tracker,
+    since: datetime,
+    until: datetime,
+    **kwargs: Any,
+) -> Any:
+    return await run_triage_pipeline(
+        backend=backend,
+        rubric=_rubric(),  # `says-hi` is severity medium
+        since=since,
+        until=until,
+        llm_provider=_MockLLMProvider(),
+        embedding_provider=_MockEmbeddingProvider(),
+        output_dir=tmp_path,
+        tracker=tracker,
+        auto_post_threshold="medium",
+        **kwargs,
+    )
+
+
+async def test_failure_recurring_across_tiled_windows_files_one_issue(tmp_path: Path) -> None:
+    """`serve`'s exactly tiled windows share no traces, so window 2's
+    recurrence can only be matched by lineage: it comments on window 1's
+    issue instead of filing a duplicate, and re-running window 2 is a no-op."""
+    backend = _WindowedBackend({_W1: ["w1-a", "w1-b", "w1-c"], _W2: ["w2-a", "w2-b", "w2-c"]})
+    tracker = _MemoryTracker()
+
+    first = await _run_window(tmp_path, backend, tracker, _W1, _W2)
+    second = await _run_window(tmp_path, backend, tracker, _W2, _W3)
+    rerun = await _run_window(tmp_path, backend, tracker, _W2, _W3)
+
+    assert [o.action for o in first.dedup_outcomes] == ["created"]
+    assert [o.action for o in second.dedup_outcomes] == ["commented"]
+    assert second.dedup_outcomes[0].matched_by == "lineage"
+    assert [o.action for o in rerun.dedup_outcomes] == ["skipped"]
+    assert list(tracker.issues) == ["AGT-1"]
+    ((issue_id, comment),) = tracker.comments
+    assert issue_id == "AGT-1"
+    assert f"Recurred in window `{_W2.isoformat()}` → `{_W3.isoformat()}`" in comment
+    assert "| commented | lineage | `AGT-1` |" in second.report_markdown
+
+
+async def test_pipeline_without_lineage_matcher_dedups_by_cluster_only(tmp_path: Path) -> None:
+    backend = _WindowedBackend({_W1: ["w1-a", "w1-b", "w1-c"], _W2: ["w2-a", "w2-b", "w2-c"]})
+    tracker = _MemoryTracker()
+    await _run_window(tmp_path, backend, tracker, _W1, _W2, lineage_matcher=None)
+    second = await _run_window(tmp_path, backend, tracker, _W2, _W3, lineage_matcher=None)
+    assert [o.action for o in second.dedup_outcomes] == ["created"]
+    assert len(tracker.issues) == 2

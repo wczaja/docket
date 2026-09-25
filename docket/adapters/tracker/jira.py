@@ -47,7 +47,8 @@ import httpx
 from docket.adapters._retry import request_with_retry
 from docket.adapters.base import Tracker
 from docket.errors import TrackerError
-from docket.models.issue import Issue, IssueDraft, IssuePatch, IssueState
+from docket.models.issue import Issue, IssueDraft, IssuePatch, IssueProvenance, IssueState
+from docket.models.listing import IssueListing
 from docket.observability import redact
 
 log = logging.getLogger(__name__)
@@ -155,6 +156,12 @@ class JiraAdapter(Tracker):
         self,
         filter: dict[str, Any] | None = None,
     ) -> list[Issue]:
+        return (await self.list_open_issues_v2(filter)).issues
+
+    async def list_open_issues_v2(
+        self,
+        filter: dict[str, Any] | None = None,
+    ) -> IssueListing:
         labels = (filter or {}).get("labels") if filter else None
         jql = self._build_jql(labels=labels, only_open=True)
         return await self._search(jql, max_results=None)
@@ -162,7 +169,7 @@ class JiraAdapter(Tracker):
     async def search_issues(self, query: str, k: int = 10) -> list[Issue]:
         # Treat `query` as a free-text search; combine with project scope.
         jql = f'project = "{_escape_jql(self._project)}" AND text ~ "{_escape_jql(query)}"'
-        return await self._search(jql, max_results=k)
+        return (await self._search(jql, max_results=k)).issues
 
     async def create_issue(self, draft: IssueDraft) -> Issue:
         fields: dict[str, Any] = {
@@ -236,7 +243,41 @@ class JiraAdapter(Tracker):
                 f"Jira comment_on_issue failed with {response.status_code}: {redact(response.text)}"
             )
 
-    async def _search(self, jql: str, *, max_results: int | None) -> list[Issue]:
+    async def update_provenance(self, issue: Issue, provenance: IssueProvenance) -> None:
+        if self._deployment != "cloud":
+            # Data Center stores the description verbatim, so the default
+            # body rewrite is exact.
+            await super().update_provenance(issue, provenance)
+            return
+        # On Cloud, `Issue.body` is a flattened rendering of the ADF document
+        # (lists, headings, and marks are dropped), so rewriting it would
+        # clobber what humans added. Patch the live document instead.
+        response = await self._request(
+            "GET",
+            f"/rest/api/3/issue/{issue.id}",
+            idempotent=True,
+            params={"fields": "description"},
+        )
+        if response.status_code >= 400:
+            raise TrackerError(
+                f"Jira get_issue failed with {response.status_code}: {redact(response.text)}"
+            )
+        fields = _parse_json(response, context="get_issue").get("fields")
+        description = fields.get("description") if isinstance(fields, dict) else None
+        # Full-replace update → safe to retry on 5xx/timeouts.
+        response = await self._request(
+            "PUT",
+            f"/rest/api/3/issue/{issue.id}",
+            idempotent=True,
+            json_body={"fields": {"description": _with_adf_provenance(description, provenance)}},
+        )
+        if response.status_code >= 400:
+            raise TrackerError(
+                f"Jira update_provenance failed with {response.status_code}: "
+                f"{redact(response.text)}"
+            )
+
+    async def _search(self, jql: str, *, max_results: int | None) -> IssueListing:
         if self._deployment == "cloud":
             return await self._search_cloud(jql, max_results=max_results)
         return await self._search_datacenter(jql, max_results=max_results)
@@ -246,7 +287,7 @@ class JiraAdapter(Tracker):
             return _DEFAULT_PAGE_SIZE
         return min(_DEFAULT_PAGE_SIZE, max_results - found)
 
-    async def _search_cloud(self, jql: str, *, max_results: int | None) -> list[Issue]:
+    async def _search_cloud(self, jql: str, *, max_results: int | None) -> IssueListing:
         """Cloud search via `GET /rest/api/3/search/jql` (nextPageToken pages).
 
         Atlassian removed `GET /rest/api/3/search` from Jira Cloud in 2025;
@@ -267,10 +308,10 @@ class JiraAdapter(Tracker):
                 if isinstance(raw, dict):
                     out.append(self._issue_from_jira(raw))
                     if max_results is not None and len(out) >= max_results:
-                        return out
+                        return IssueListing(issues=out)
             token = data.get("nextPageToken")
             if not isinstance(token, str) or not token:
-                return out
+                return IssueListing(issues=out)
             next_page_token = token
         log.warning(
             "Jira search hit the %d-page cap with more results pending; "
@@ -278,9 +319,9 @@ class JiraAdapter(Tracker):
             _MAX_PAGES,
             len(out),
         )
-        return out
+        return IssueListing(issues=out, truncated=True, page_limit=_MAX_PAGES)
 
-    async def _search_datacenter(self, jql: str, *, max_results: int | None) -> list[Issue]:
+    async def _search_datacenter(self, jql: str, *, max_results: int | None) -> IssueListing:
         """Data Center search via classic `GET /rest/api/2/search` (startAt/total)."""
         out: list[Issue] = []
         start_at = 0
@@ -297,10 +338,10 @@ class JiraAdapter(Tracker):
                 if isinstance(raw, dict):
                     out.append(self._issue_from_jira(raw))
                     if max_results is not None and len(out) >= max_results:
-                        return out
+                        return IssueListing(issues=out)
             total = data.get("total")
             if not isinstance(total, int) or start_at + len(issues) >= total:
-                return out
+                return IssueListing(issues=out)
             start_at += len(issues)
         log.warning(
             "Jira search hit the %d-page cap with more results pending; "
@@ -308,7 +349,7 @@ class JiraAdapter(Tracker):
             _MAX_PAGES,
             len(out),
         )
-        return out
+        return IssueListing(issues=out, truncated=True, page_limit=_MAX_PAGES)
 
     async def _search_page(self, path: str, params: dict[str, str | int]) -> dict[str, Any]:
         response = await self._request("GET", path, idempotent=True, params=dict(params))
@@ -473,3 +514,29 @@ def _adf_to_text(adf: Any) -> str:
         if text_parts:
             paragraphs.append("".join(text_parts))
     return "\n\n".join(paragraphs)
+
+
+def _with_adf_provenance(doc: Any, provenance: IssueProvenance) -> dict[str, Any]:
+    """Return ADF `doc` with `provenance` as its live provenance block.
+
+    Only the top-level block holding the live (last) block is rewritten —
+    as one plain-text paragraph, the way `_markdown_to_adf` wrote it — so
+    formatting anywhere else in the description survives. A document
+    without a block gets a new paragraph appended.
+    """
+    out: dict[str, Any] = dict(doc) if isinstance(doc, dict) else {"type": "doc", "version": 1}
+    blocks = out.get("content")
+    content: list[Any] = list(blocks) if isinstance(blocks, list) else []
+    for idx in range(len(content) - 1, -1, -1):
+        text = _adf_to_text({"content": [content[idx]]})
+        if IssueProvenance.parse_from_body(text) is not None:
+            content[idx] = _adf_text_paragraph(provenance.replace_in_body(text))
+            break
+    else:
+        content.append(_adf_text_paragraph(provenance.to_html_comment()))
+    out["content"] = content
+    return out
+
+
+def _adf_text_paragraph(text: str) -> dict[str, Any]:
+    return {"type": "paragraph", "content": [{"type": "text", "text": text}]}

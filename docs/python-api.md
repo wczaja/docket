@@ -68,6 +68,7 @@ wrapper around this). All parameters keyword-only:
 | `output_dir` | `Path \| None` | draft/report queue dir; default `~/.docket/queued-issues/` |
 | `tracker` | `Tracker \| None` | enables dedup + posting; `None` = queue locally |
 | `auto_post_threshold` | `"never"` | `critical\|high\|medium\|low\|never` |
+| `lineage_matcher` | `LineageMatcher \| None = match_mode_lineage` | links a draft to an open issue when neither its `cluster_id` nor its traces match: the cross-window case. Default: one open issue per (mode, rubric version); `None` = cluster-only dedup |
 | `sample_count`, `sample_strategy`, `stratify_by` | `None`, `"uniform"`, `None` | run_id-seeded sampling (`uniform\|stratified\|errors-only`) |
 | `checkpoint` | `bool = False` | sentinel-based resumability (needs write access) |
 | `max_traces_per_run` | `int \| None = 1000` | budget gate; `None` disables |
@@ -81,8 +82,33 @@ classification failures are absorbed and reported, not raised.
 **`TriageResult`** (attributes): `run_report: RunReport`,
 `clusters: list[Cluster]`, `drafts: list[IssueDraft]`,
 `report_markdown: str`, `dedup_outcomes` (per-draft tracker decision:
-posted / commented / skipped / needs_create), `review_outcomes`
+posted / commented / skipped / needs_create, with `matched_by` =
+`cluster_id` / `member_overlap` / `lineage` for matches), `review_outcomes`
 (populated only by the CLI's `--review`).
+
+### Cross-window dedup: `docket.agent.subagents.poster.LineageMatcher`
+
+Consecutive windows share no traces, so a failure that recurs in a
+later window can't match its open issue by `cluster_id` (a hash of the
+member traces) or by trace overlap. For such a draft, the poster asks a
+`LineageMatcher`:
+
+```python
+LineageMatcher = Callable[
+    [IssueDraft, Sequence[LineageCandidate]],  # candidates: never empty
+    Awaitable[LineageCandidate | None],  # None: treat as a new failure
+]
+```
+
+Each `LineageCandidate(issue, provenance)` is an open issue carrying the
+draft's `mode:` and `rubric:` labels, with parsed provenance naming the
+same mode and rubric version. The default, `match_mode_lineage`, returns
+the oldest candidate by tracker key, which gives one open issue per
+lineage. A custom matcher can instead compare evidence, for example
+embedding similarity, to keep sub-patterns of one mode in separate
+issues. Keep it deterministic. Re-runs stay idempotent either way: the
+poster records every reported cluster in the issue's provenance and
+matches that record before it consults the matcher.
 
 ### `compute_run_id(*, backend_id, rubric_version, since, until) -> str`
 
@@ -152,8 +178,14 @@ async def search_issues(query, k=10) -> list[Issue]
 async def create_issue(draft: IssueDraft) -> Issue
 async def update_issue(issue_id, patch: IssuePatch) -> Issue
 async def comment_on_issue(issue_id, comment) -> None
+async def update_provenance(issue: Issue, provenance: IssueProvenance) -> None
 async def close() -> None
 ```
+
+`list_open_issues_v2` and `update_provenance` have defaults built on the
+other methods: an untruncated listing, and a body rewrite through
+`update_issue`. Override them when your tracker paginates, or when its
+`Issue.body` isn't the verbatim stored body; see [adapters.md](adapters.md).
 
 ---
 
@@ -233,7 +265,7 @@ serialization.
 | `Annotation` | backend-bound classification: adds `run_id, severity, confidence, excerpt`; `idempotency_key()` = `trace_id\|run_id\|rubric_version\|mode_id` |
 | `Cluster`, `ClusterStats` | `cluster_id, mode_id, severity, member_trace_ids, representative_trace_id, representative_excerpt, stats(size, min/max/mean confidence)`; `compute_cluster_id()` is deterministic |
 | `IssueDraft` | `cluster_id, mode_id, rubric_version, run_id, severity, representative_trace_id, member_trace_ids, title, body, labels` — body ends with the provenance comment |
-| `IssueProvenance` | parse/emit the `<!-- docket:provenance {...} -->` block (`parse_from_body`) |
+| `IssueProvenance` | parse/emit the `<!-- docket:provenance {...} -->` block (`parse_from_body`, `replace_in_body`); carries the dedup ledger (`reported_cluster_ids`, `reported_trace_ids`) |
 | `Issue`, `IssuePatch`, `IssueListing` | tracker-side shapes; `IssueListing.truncated` is the dedup-safety flag |
 | `TraceListing`, `TraceSummary`, `RESERVED_FILTER_KEYS` | listing-with-summaries + `truncated` flag |
 | `RunReport`, `ModeStats`, `TraceResult` | the structured run report behind `report_markdown`: window, counts, `traces_listed`, `listing_truncated`, per-mode positive/negative/error counts, `annotations_written` |

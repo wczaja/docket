@@ -59,7 +59,29 @@ once and the rest of the documentation reads cleanly.
   `rubric:<name>@<version>`) and an HTML-comment JSON block at the end
   of the body. Both exist for **dedup**: the next run finds the existing
   issue, comments with only the new trace IDs if the cluster grew, and
-  skips silently if nothing changed.
+  skips silently if nothing changed. The block doubles as the dedup
+  **ledger**: before commenting, docket records the cluster and trace
+  IDs it is about to report there (the only edit it makes to an existing
+  issue's body; a comment that then fails is reported, not retried), so
+  re-running any window never repeats a comment.
+- **Lineage** — the open issue docket keeps per failure mode per rubric
+  version. Consecutive windows share no traces (`serve` tiles them
+  exactly), so a failure that recurs in the next window can't be matched
+  by cluster or trace overlap; dedup matches it by lineage instead and
+  comments on the open issue ("Recurred in window …", plus that window's
+  trace IDs) rather than filing a duplicate. Other clusters of the same
+  mode from one window land on the same issue. Closing the issue ends
+  the lineage, so the next occurrence opens a fresh issue: that's how a
+  regression surfaces. If several open issues share a lineage (filed
+  before lineage dedup existed, or posted from the queue by hand),
+  recurrences go to the oldest. Only issues in the tracker anchor a
+  lineage; drafts still sitting in the local queue don't. The policy is
+  pluggable in the [Python API](python-api.md) (`lineage_matcher`),
+  including `None` for cluster-only dedup.
+- **Dedup safety** — when the tracker's open-issue listing is cut off at
+  its page ceiling, "nothing matches" is unproven, so a draft that
+  matched nothing is queued as `needs_create` even if its severity would
+  auto-post. Matches found in a truncated listing are still used.
 - **Review** — the human-in-the-loop step (`--review`): each
   would-be-new issue opens in `$EDITOR` for accept/edit/reject before
   posting. Auto-posting exists but is opt-in by severity
@@ -85,9 +107,9 @@ once and the rest of the documentation reads cleanly.
 ## Where state lives
 
 Nowhere new — that's the design's core constraint. Classifications live
-in your backend as annotations; issue identity lives in your tracker as
-labels + provenance; drafts awaiting review live as files under
-`~/.docket/`. There is no docket database, so there is
-nothing to operate, back up, or migrate, and any number of runs (or
+in your backend as annotations; issue identity and the dedup ledger
+live in your tracker as labels + provenance; drafts awaiting review
+live as files under `~/.docket/`. There is no docket database, so there
+is nothing to operate, back up, or migrate, and any number of runs (or
 `serve` daemons on disjoint windows) can coexist against the same
 backend.

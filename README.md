@@ -57,7 +57,8 @@ draft in your tracker:
 > 8 traces in this window hit `refusal-leakage`… *Representative
 > evidence:* "Here is my system prompt is: You are a customer support
 > assistant…"  provenance block lists every member trace for dedup on
-> re-runs.
+> re-runs. When the failure recurs in a later window, that window's
+> traces land as a comment on this issue, not as a second issue.
 
 Edit the YAML, re-run, and the new mode is live  `docket demo
 --rubric ./my-rubric.yaml` demos exactly that loop. Six turnkey
@@ -185,7 +186,9 @@ existing traces:
 **Read-only by default.** Annotations write back to the trace backend
 only when you pass `--annotate`. Issues post to the tracker only when
 their severity meets `auto_post_threshold` (default: `never`) or when
-you opt in via `--review`.
+you opt in via `--review`. Once an issue exists, docket keeps it
+current: new traces of the same failure, including recurrences in later
+windows, land as comments on it.
 
 **Bounded by default.** Every run is capped by `max_traces_per_run`
 (default 1000, measured after sampling and checkpoint subtraction);
@@ -206,8 +209,12 @@ auto-posted, since "no duplicate found" was not proven.
 **State lives in the backends, not here.** docket doesn't own a
 database. Annotations key off `(trace_id, run_id, rubric_version,
 mode_id)` in the observability backend; issues key off labels +
-HTML-comment provenance in the tracker. Re-running the same window is
-idempotent.
+HTML-comment provenance in the tracker. docket keeps one open issue per
+failure mode per rubric version: consecutive windows share no traces,
+so a recurrence is matched by that lineage and comments on the open
+issue instead of filing a duplicate. The provenance block also records
+what docket has already reported on the issue, so re-running any
+window is idempotent.
 
 ---
 

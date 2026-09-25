@@ -5,8 +5,10 @@ from datetime import UTC, datetime
 import pytest
 
 from docket.errors import BackendError
+from docket.models.issue import Issue
 from docket.models.listing import (
     RESERVED_FILTER_KEYS,
+    IssueListing,
     TraceFilter,
     TraceListing,
     TraceSummary,
@@ -68,3 +70,18 @@ def test_parse_status_filter_accepts_valid_values() -> None:
 def test_parse_status_filter_rejects_unsupported_values() -> None:
     with pytest.raises(BackendError, match="unsupported value"):
         parse_status_filter({"status": "failed"})
+
+
+def test_issue_listing_defaults_to_complete() -> None:
+    listing = IssueListing(issues=[Issue(id="1", title="t", body="b")])
+    assert listing.truncated is False
+    assert listing.page_limit is None
+
+
+def test_issue_listing_round_trips_through_json() -> None:
+    listing = IssueListing(
+        issues=[Issue(id="1", key="AGT-1", title="t", body="b", labels=["docket"])],
+        truncated=True,
+        page_limit=20,
+    )
+    assert IssueListing.model_validate_json(listing.model_dump_json()) == listing

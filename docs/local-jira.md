@@ -97,9 +97,15 @@ auto_post_threshold: never  # `critical` | `high` | `medium` | `low` | `never`
 
 - **Dedup** (always on when a tracker is configured) — the pipeline queries
   Jira by labels (`docket`, `mode:<id>`, `rubric:<id>@<version>`) and
-  parses the embedded HTML provenance block to find a `cluster_id` match.
-  - Match found + cluster has new traces → posts a comment listing the new
-    trace IDs only.
+  parses the embedded HTML provenance block to find a match by
+  `cluster_id`, by shared traces (a grown cluster), or by lineage: the
+  open issue for the same mode and rubric version, which is how a
+  recurrence in a later window finds its issue.
+  - Match found + cluster has new traces → records them in the
+    description's provenance paragraph, then posts a comment listing the
+    new trace IDs only. On Cloud only that paragraph of the ADF document
+    is rewritten; the rest of the description, formatting included, is
+    left alone.
   - Match found + no new traces → no-op (re-running is idempotent).
   - No match → see below.
 - **Auto-post** (`--auto-post-threshold critical|high|medium|low|never`, or

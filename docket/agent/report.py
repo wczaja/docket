@@ -9,10 +9,19 @@ for convenience.
 
 from pathlib import Path
 
-from docket.agent.subagents.poster import DedupOutcome
+from docket.agent.subagents.poster import DedupOutcome, MatchKind
 from docket.models.cluster import Cluster
 from docket.models.issue import IssueDraft
 from docket.models.report import RunReport
+
+# How dedup found the existing issue, in the report's words: the same
+# cluster, a grown cluster sharing traces, or the (mode, rubric) lineage —
+# a recurrence in a later window.
+_MATCH_LABELS: dict[MatchKind, str] = {
+    "cluster_id": "cluster",
+    "member_overlap": "shared traces",
+    "lineage": "lineage",
+}
 
 
 def render_report(
@@ -82,8 +91,8 @@ def render_report(
     if dedup_outcomes:
         lines.append("## Tracker dedup")
         lines.append("")
-        lines.append("| cluster | action | tracker issue |")
-        lines.append("| --- | --- | --- |")
+        lines.append("| cluster | action | matched by | tracker issue |")
+        lines.append("| --- | --- | --- | --- |")
         for outcome in dedup_outcomes:
             issue = outcome.created_issue or outcome.existing_issue
             issue_ref = "—"
@@ -91,8 +100,22 @@ def render_report(
                 issue_ref = f"`{issue.key or issue.id}`"
                 if issue.url:
                     issue_ref = f"[{issue.key or issue.id}]({issue.url})"
-            lines.append(f"| `{outcome.draft.cluster_id}` | {outcome.action} | {issue_ref} |")
+            action: str = outcome.action
+            if outcome.auto_post_demoted:
+                action += " (listing truncated)"
+            matched_by = _MATCH_LABELS[outcome.matched_by] if outcome.matched_by else "—"
+            lines.append(
+                f"| `{outcome.draft.cluster_id}` | {action} | {matched_by} | {issue_ref} |"
+            )
         lines.append("")
+        demoted = sum(1 for o in dedup_outcomes if o.auto_post_demoted)
+        if demoted:
+            lines.append(
+                f"{demoted} draft(s) met `auto_post_threshold` but were queued as "
+                "`needs_create`: the tracker's open-issue listing hit its page "
+                "ceiling, so a duplicate couldn't be ruled out."
+            )
+            lines.append("")
 
     if run_report.tracker_failures:
         lines.append("## Tracker failures")
