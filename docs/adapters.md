@@ -49,10 +49,13 @@ Contract obligations, each pinned by the shared parity tests:
 - **Loud truncation.** If listing stops at a page ceiling
   (`<NAME>_MAX_LIST_PAGES`), return `TraceListing(truncated=True)` and
   warn once — never pretend a partial listing is the window.
-- **Filter pushdown.** The listing `filter`'s reserved `status` key
-  (`{"status": "error"}` for `--strategy errors-only`) must be pushed to
-  the backend query, or the adapter must raise — not filter client-side
-  silently.
+- **Filter pushdown (not implemented yet).** `docket.models.listing`
+  reserves a `status` key in the listing `filter` (`{"status": "error"}`)
+  for `--strategy errors-only`, but nothing sends it today: that
+  strategy falls back to uniform sampling, the shipped adapters ignore
+  `filter` entirely, and no parity test covers it. The intended contract
+  is that adapters push a reserved key down to the backend query or raise
+  `BackendError`, never filter client-side silently.
 - **Idempotent annotations.** Writing the same
   `(trace_id, run_id, rubric_version, mode_id)` twice upserts.
 - **Retry on 429/5xx** with backoff, honoring `Retry-After`.

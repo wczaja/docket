@@ -304,13 +304,12 @@ For windows too large to enumerate, sample:
 ```bash
 # 100 seeded-random traces from the window
 docket run ... --sample 100
-
-# only traces whose root span errored (filter pushed down to the backend)
-docket run ... --sample 100 --strategy errors-only
-
-# equal allocation across tenants, so small tenants get seen
-docket run ... --sample 90 --strategy stratified --stratify-by tag:tenant_id
 ```
+
+Only uniform sampling is implemented. `--strategy errors-only` and
+`--strategy stratified` are accepted, but both log a warning and fall
+back to uniform: no root-error filter reaches the backend, and there is
+no `--stratify-by` option for per-status or per-tenant allocation yet.
 
 Sampling is seeded by the `run_id`, so re-runs of the same window (and
 `--checkpoint` resumes) draw the same traces. If a backend stops

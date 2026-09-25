@@ -157,8 +157,7 @@ docket run --backend phoenix --phoenix-url http://localhost:6006 \
 |---|---|---|
 | `--max-traces 1..10000000` | config / `1000` | Hard cap on effective workload (post-sample, post-checkpoint). Exceeding it aborts **before any trace fetch** with `BudgetExceededError`; truncation is never silent |
 | `--sample N` | off | Classify only N traces sampled from the window, seeded by `run_id` (re-runs sample identically) |
-| `--strategy {uniform|stratified|errors-only}` | `uniform` | `errors-only` pushes a root-error filter down to the backend; `stratified` allocates equally across strata |
-| `--stratify-by {status|latency_bucket|tag:<key>}` | — | Required with `--strategy stratified`; an unusable key aborts loudly |
+| `--strategy {uniform\|stratified\|errors-only}` | `uniform` | How `--sample` picks traces. Only `uniform` is implemented: `errors-only` and `stratified` are accepted but log a warning and fall back to uniform. No root-error filter is pushed down to the backend, and there is no `--stratify-by` option yet |
 | `--checkpoint/--no-checkpoint` | off | Write per-trace sentinels; on re-run with the same `run_id`, skip already-classified traces. Requires backend write access |
 | `--dry-run` | off | Same listing/filter/sample/checkpoint/budget computation as a real run, prints the cost estimate + both gate statuses, executes nothing. **Exit code is non-zero iff the real run would abort** — usable as a CI preflight gate |
 
