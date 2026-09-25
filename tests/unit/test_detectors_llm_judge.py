@@ -1,14 +1,16 @@
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from docket.detectors import llm_judge as llm_judge_module
 from docket.detectors.llm_judge import LLMJudgeDetector
 from docket.errors import DetectionError
 from docket.llm.base import ModelProvider
 from docket.models.trace import TraceLike
-from docket.rubric.spec import Detection, Mode
+from docket.rubric.spec import Detection, Mode, Rubric
 
 
 class MockProvider(ModelProvider):
@@ -309,3 +311,246 @@ async def test_per_mode_model_override_provider_is_cached(
     await detector.evaluate(mode, trace)
     await detector.evaluate(mode, trace)
     assert built == ["anthropic:claude-test"]
+
+
+# --- evidence normalization + excerpt verification ------------------------------
+
+_ANSWER = "[user] Which version added feature X?\n[assistant] Feature X was added in v2.1."
+
+
+def _evidence_mode(properties: dict[str, Any]) -> Mode:
+    return Mode(
+        id="off-corpus-answer",
+        severity="critical",
+        detection=Detection(
+            type="llm_judge",
+            prompt="Detect ungrounded claims.",
+            output_schema={
+                "type": "object",
+                "required": ["positive"],
+                "properties": {"positive": {"type": "boolean"}, **properties},
+            },
+        ),
+    )
+
+
+_UNGROUNDED_MODE = _evidence_mode(
+    {
+        "ungrounded_excerpt": {"type": ["string", "null"]},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    }
+)
+
+
+async def test_llm_judge_copies_mode_evidence_property_into_excerpt() -> None:
+    response = {
+        "positive": True,
+        "ungrounded_excerpt": "Feature X was added in v2.1.",
+        "confidence": 0.9,
+    }
+    detector = LLMJudgeDetector(MockProvider([dict(response)]))
+    verdict = await detector.evaluate(_UNGROUNDED_MODE, TraceLike(full_text=_ANSWER))
+    assert verdict.extra == {
+        **response,
+        "excerpt": "Feature X was added in v2.1.",
+        "excerpt_verified": True,
+    }
+
+
+async def test_llm_judge_does_not_mutate_the_provider_response() -> None:
+    response = {"positive": True, "ungrounded_excerpt": "Feature X was added in v2.1."}
+    detector = LLMJudgeDetector(MockProvider([response]))
+    await detector.evaluate(_UNGROUNDED_MODE, TraceLike(full_text=_ANSWER))
+    assert response == {"positive": True, "ungrounded_excerpt": "Feature X was added in v2.1."}
+
+
+async def test_llm_judge_excerpt_from_judge_wins_over_schema_evidence() -> None:
+    """A judge-returned `excerpt` is kept even when the schema declares a
+    different evidence property (providers don't forbid undeclared keys)."""
+    mode = _evidence_mode({"reason": {"type": "string"}})
+    response = {
+        "positive": True,
+        "excerpt": "Feature X was added in v2.1.",
+        "reason": "claim absent from retrieval",
+    }
+    detector = LLMJudgeDetector(MockProvider([response]))
+    verdict = await detector.evaluate(mode, TraceLike(full_text=_ANSWER))
+    assert verdict.extra["excerpt"] == "Feature X was added in v2.1."
+    assert verdict.extra["reason"] == "claim absent from retrieval"
+
+
+async def test_llm_judge_evidence_is_first_nonblank_string_in_declaration_order() -> None:
+    mode = _evidence_mode(
+        {
+            "staleness_days": {"type": ["integer", "null"]},
+            "chosen_specialist": {"type": ["string", "null"]},
+            "expected_specialist": {"type": ["string", "null"]},
+        }
+    )
+    response = {
+        "positive": True,
+        "excerpt": "  ",
+        "staleness_days": 400,
+        "chosen_specialist": None,
+        "expected_specialist": "refunds_specialist",
+    }
+    detector = LLMJudgeDetector(MockProvider([response]))
+    verdict = await detector.evaluate(mode, TraceLike(full_text="routed to refunds_specialist"))
+    assert verdict.extra["excerpt"] == "refunds_specialist"
+    assert verdict.extra["excerpt_verified"] is True
+
+
+async def test_llm_judge_positive_without_text_evidence_adds_no_keys() -> None:
+    mode = _evidence_mode({"staleness_days": {"type": ["integer", "null"]}})
+    response = {"positive": True, "staleness_days": 540}
+    detector = LLMJudgeDetector(MockProvider([response]))
+    verdict = await detector.evaluate(mode, TraceLike(full_text="pricing page dated 2024"))
+    assert verdict.extra == {"positive": True, "staleness_days": 540}
+
+
+async def test_llm_judge_negative_verdict_gets_no_evidence_keys() -> None:
+    response = {"positive": False, "ungrounded_excerpt": "not a failure"}
+    detector = LLMJudgeDetector(MockProvider([response]))
+    verdict = await detector.evaluate(_UNGROUNDED_MODE, TraceLike(full_text=_ANSWER))
+    assert verdict.extra == {"positive": False, "ungrounded_excerpt": "not a failure"}
+
+
+async def test_llm_judge_flags_but_keeps_excerpt_missing_from_trace() -> None:
+    """A hallucinated quote is flagged, never silently dropped."""
+    response = {"positive": True, "ungrounded_excerpt": "Feature X shipped in v3.0."}
+    detector = LLMJudgeDetector(MockProvider([response]))
+    verdict = await detector.evaluate(_UNGROUNDED_MODE, TraceLike(full_text=_ANSWER))
+    assert verdict.extra["excerpt"] == "Feature X shipped in v3.0."
+    assert verdict.extra["excerpt_verified"] is False
+
+
+@pytest.mark.parametrize(
+    ("excerpt", "verified"),
+    [
+        ('"feature x WAS  added\nin v2.1"', True),  # case, whitespace, wrapping quotes
+        ("Which version … Feature X was added", True),  # unicode ellipsis elision
+        ("Which version [...] v2.1", True),  # bracketed elision
+        ("Which version ... v2.1 ... feature X", False),  # elided parts out of order
+        ("It’s Feature X", False),  # curly apostrophe normalized, still absent
+        ("...", False),  # no content left to check
+    ],
+)
+async def test_llm_judge_excerpt_check_is_lenient_on_form_strict_on_content(
+    excerpt: str, verified: bool
+) -> None:
+    response = {"positive": True, "ungrounded_excerpt": excerpt}
+    detector = LLMJudgeDetector(MockProvider([response]))
+    verdict = await detector.evaluate(_UNGROUNDED_MODE, TraceLike(full_text=_ANSWER))
+    assert verdict.extra["excerpt_verified"] is verified
+
+
+async def test_llm_judge_excerpt_check_uses_the_redacted_text_the_judge_saw() -> None:
+    """The judge only ever sees redacted text, so it quotes placeholders; a
+    PII-shaped string in the excerpt gets the same `redact()` pass."""
+    trace = TraceLike(full_text="[assistant] I emailed jane.doe@example.com the refund.")
+    responses = [
+        {"positive": True, "ungrounded_excerpt": "I emailed [REDACTED_EMAIL] the refund"},
+        {"positive": True, "ungrounded_excerpt": "I emailed someone@else.org the refund"},
+    ]
+    detector = LLMJudgeDetector(MockProvider(responses))
+    placeholder = await detector.evaluate(_UNGROUNDED_MODE, trace)
+    raw_pii = await detector.evaluate(_UNGROUNDED_MODE, trace)
+    assert placeholder.extra["excerpt_verified"] is True
+    assert raw_pii.extra["excerpt_verified"] is True
+
+
+async def test_llm_judge_excerpt_may_quote_the_context() -> None:
+    """The context block is part of what the judge saw."""
+    response = {"positive": True, "ungrounded_excerpt": "release notes for v3.4"}
+    detector = LLMJudgeDetector(MockProvider([response]))
+    verdict = await detector.evaluate(
+        _UNGROUNDED_MODE,
+        TraceLike(full_text=_ANSWER, context="Retrieved: release notes for v3.4 and v3.5."),
+    )
+    assert verdict.extra["excerpt_verified"] is True
+
+
+async def test_llm_judge_batch_checks_each_excerpt_against_its_own_trace() -> None:
+    provider = MockProvider(
+        [
+            {
+                "verdicts": [
+                    {"positive": True, "ungrounded_excerpt": "Feature Y was added in v9"},
+                    {"positive": True, "ungrounded_excerpt": "Feature Y was added in v9"},
+                    {"positive": False, "ungrounded_excerpt": None},
+                ]
+            }
+        ]
+    )
+    detector = LLMJudgeDetector(provider, batch_size=8)
+    verdicts = await detector.evaluate_batch(
+        _UNGROUNDED_MODE,
+        [
+            TraceLike(full_text=_ANSWER),
+            TraceLike(full_text="[assistant] Feature Y was added in v9."),
+            TraceLike(full_text="[assistant] Feature Z is on the roadmap."),
+        ],
+    )
+    assert [v.extra.get("excerpt_verified") for v in verdicts] == [False, True, None]
+    assert verdicts[0].extra["excerpt"] == "Feature Y was added in v9"
+    assert "excerpt" not in verdicts[2].extra
+
+
+# --- every shipped rubric surfaces its judge's evidence, unedited ---------------
+
+_REPO = Path(__file__).resolve().parents[2]
+_SHIPPED_RUBRICS = [
+    *sorted((_REPO / "docket" / "rubric" / "builtin").glob("*/v1/rubric.yaml")),
+    *sorted((_REPO / "rubrics" / "registry").glob("*/v1/rubric.yaml")),
+    *sorted((_REPO / "rubrics" / "examples").glob("*.yaml")),
+]
+
+
+def _judges(detection: Detection) -> list[Detection]:
+    if detection.type == "llm_judge":
+        return [detection]
+    return [judge for operand in detection.operands or [] for judge in _judges(operand)]
+
+
+_SHIPPED_JUDGE_MODES = [
+    pytest.param(
+        mode.model_copy(update={"detection": judge}),
+        id=f"{path.relative_to(_REPO).parent}:{mode.id}",
+    )
+    for path in _SHIPPED_RUBRICS
+    for mode in Rubric.model_validate(yaml.safe_load(path.read_text())).modes
+    for judge in _judges(mode.detection)
+]
+
+
+def _positive_response(output_schema: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """A schema-valid positive verdict with every property filled in, and the
+    evidence docket should surface: the first string-typed property's value."""
+    response: dict[str, Any] = {}
+    evidence: str | None = None
+    for name, spec in output_schema["properties"].items():
+        types = spec["type"] if isinstance(spec["type"], list) else [spec["type"]]
+        if name == "positive":
+            response[name] = True
+        elif "string" in types:
+            response[name] = f"{name} evidence"
+            evidence = evidence or response[name]
+        elif "integer" in types:
+            response[name] = 7
+        elif "number" in types:
+            response[name] = 0.5
+    return response, evidence
+
+
+def test_sweep_covers_every_shipped_judge() -> None:
+    assert len(_SHIPPED_JUDGE_MODES) == 43
+
+
+@pytest.mark.parametrize("mode", _SHIPPED_JUDGE_MODES)
+async def test_shipped_rubric_judge_evidence_reaches_excerpt(mode: Mode) -> None:
+    assert mode.detection.output_schema is not None
+    response, evidence = _positive_response(mode.detection.output_schema)
+    detector = LLMJudgeDetector(MockProvider([response]))
+    verdict = await detector.evaluate(mode, TraceLike(full_text="trace"))
+    assert verdict.positive
+    assert verdict.extra.get("excerpt") == evidence

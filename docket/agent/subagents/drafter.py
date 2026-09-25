@@ -157,6 +157,12 @@ def _build_user_prompt(cluster: Cluster, mode: Mode) -> str:
     parts.append(f"Representative trace ID: {cluster.representative_trace_id}")
     if cluster.representative_excerpt:
         parts.append(f"Representative evidence:\n---\n{cluster.representative_excerpt}\n---")
+        if cluster.representative_excerpt_verified is False:
+            parts.append(
+                "Caution: the failure-mode judge reported this evidence, but it does "
+                "not appear verbatim in the trace. Attribute it to the judge; do not "
+                "present it as a quote from the trace."
+            )
     parts.append(
         "Write an issue draft. The title should describe the failure mode "
         "concretely (not just the mode name). The body should explain what's "

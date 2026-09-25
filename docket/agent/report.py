@@ -70,7 +70,12 @@ def render_report(
                 excerpt = cluster.representative_excerpt.strip().replace("\n", " ")
                 if len(excerpt) > 200:
                     excerpt = excerpt[:197] + "..."
-                lines.append(f"- **Representative evidence**: {excerpt}")
+                caveat = (
+                    " _(judge-reported; not found verbatim in the trace)_"
+                    if cluster.representative_excerpt_verified is False
+                    else ""
+                )
+                lines.append(f"- **Representative evidence**{caveat}: {excerpt}")
             if cluster.stats.mean_confidence is not None:
                 lines.append(f"- **Mean confidence**: {cluster.stats.mean_confidence:.2f}")
             lines.append(f"- **Members**: {len(cluster.member_trace_ids)}")

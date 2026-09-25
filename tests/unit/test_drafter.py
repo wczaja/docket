@@ -213,3 +213,23 @@ async def test_draft_creates_output_dir_if_missing(tmp_path: Path) -> None:
         output_dir=queue,
     )
     assert (queue / "nested.json").exists()
+
+
+@pytest.mark.parametrize(("verified", "flagged"), [(False, True), (True, False), (None, False)])
+async def test_prompt_flags_evidence_not_found_verbatim_in_trace(
+    tmp_path: Path, verified: bool | None, flagged: bool
+) -> None:
+    """A judge excerpt that isn't in the trace is still shown, but the drafter
+    is told not to present it as a quote."""
+    provider = _MockProvider([{"title": "Hallucinated geographic facts", "body": "Body of issue."}])
+    cluster = _cluster().model_copy(update={"representative_excerpt_verified": verified})
+    await draft_issues(
+        [cluster],
+        rubric=_rubric_with_mode(),
+        llm_provider=provider,
+        run_id="r-1",
+        output_dir=tmp_path,
+    )
+    _system, user, _schema = provider.calls[0]
+    assert "Representative evidence:\n---\nThe capital of France is Tokyo.\n---" in user
+    assert ("does not appear verbatim in the trace" in user) is flagged

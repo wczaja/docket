@@ -44,6 +44,11 @@ async def cluster_per_mode(
 ) -> list[Cluster]:
     """For each mode in `rubric`, cluster the classified-positive traces.
 
+    Evidence comes from `excerpt`, then `match`, in each classification's
+    `extra`. Detectors put it there whatever the rubric calls it: the LLM
+    judge copies a mode's evidence property (`ungrounded_excerpt`, ...) into
+    `excerpt`, and composites lift their operands' keys.
+
     `traces_by_id` is optional context the clusterer uses when a classification
     has no `excerpt` / `match` in its `extra` — it falls back to the trace's
     final response. Without it, classifications missing an excerpt embed as
@@ -155,6 +160,20 @@ def _text_for(
     return f"trace:{classification.trace_id} mode:{classification.mode_id}"
 
 
+def _excerpt_verified(classification: Classification) -> bool | None:
+    """The judge's verbatim check on the excerpt `_text_for` uses, if any.
+
+    None when `_text_for` falls back to `match` or the trace: those texts
+    come from the trace itself, so there is no judge quote to check.
+    """
+    extra = classification.extra or {}
+    excerpt = extra.get("excerpt")
+    if not (isinstance(excerpt, str) and excerpt.strip()):
+        return None
+    verified = extra.get("excerpt_verified")
+    return verified if isinstance(verified, bool) else None
+
+
 def _hdbscan_labels(
     embeddings: list[list[float]],
     *,
@@ -233,6 +252,7 @@ def _build_clusters(
                 member_trace_ids=[m.trace_id for m in members],
                 representative_trace_id=rep.trace_id,
                 representative_excerpt=member_excerpts[rep_local_idx],
+                representative_excerpt_verified=_excerpt_verified(rep),
                 stats=stats,
             )
         )

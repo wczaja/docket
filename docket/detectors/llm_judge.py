@@ -12,8 +12,16 @@ Batching: `evaluate_batch` groups up to `batch_size` traces per provider call.
 For a batch of N, the schema is wrapped as `{verdicts: [item_schema] * N}` and
 the prompt blocks the traces with explicit numbering so the model emits one
 verdict per trace in order.
+
+Evidence: rubrics name a judge's evidence property per mode
+(`ungrounded_excerpt`, `repeated_step`, ...), but clustering, annotations and
+drafts read one canonical key. For a positive verdict the detector copies the
+evidence into `extra["excerpt"]` and records in `extra["excerpt_verified"]`
+whether that excerpt occurs in the redacted text the judge saw. An unverified
+excerpt is kept and flagged, never dropped.
 """
 
+import re
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -35,6 +43,13 @@ _SYSTEM_PROMPT = (
     "the JSON object described by the schema. The `positive` field is true when "
     "the failure mode is present in the trace."
 )
+
+# Verdict keys that are never evidence: the verdict itself, and the keys this
+# module owns.
+_NON_EVIDENCE_KEYS = frozenset({"positive", "confidence", "excerpt", "excerpt_verified"})
+# How judges elide inside a quote: `...`, `…`, optionally bracketed.
+_ELISION_RE = re.compile(r"[\[(]?\s*(?:\.{3,}|…)\s*[\])]?")
+_STRAIGHT_QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"'})
 
 
 class LLMJudgeDetector(Detector):
@@ -88,7 +103,7 @@ class LLMJudgeDetector(Detector):
                 user=user,
                 schema=d.output_schema,
             )
-            return [Verdict(positive=self._validated_positive(mode, result), extra=result)]
+            return [self._verdict(mode, result, redacted[0], contexts[0])]
         batch_schema = self._wrap_schema_for_batch(d.output_schema, len(traces))
         user = self._build_batch_prompt(d.prompt, redacted, contexts)
         result = await provider.structured_complete(
@@ -107,11 +122,36 @@ class LLMJudgeDetector(Detector):
                 f"provider returned {len(verdicts_data)}"
             )
         out: list[Verdict] = []
-        for v in verdicts_data:
+        for v, trace_text, context in zip(verdicts_data, redacted, contexts, strict=True):
             if not isinstance(v, dict):
                 raise DetectionError(f"Mode {mode.id!r}: batched verdict was not an object")
-            out.append(Verdict(positive=self._validated_positive(mode, v), extra=v))
+            out.append(self._verdict(mode, v, trace_text, context))
         return out
+
+    @classmethod
+    def _verdict(
+        cls,
+        mode: Mode,
+        result: dict[str, Any],
+        trace_text: str,
+        context: str | None,
+    ) -> Verdict:
+        """Build one verdict; a positive one gets the canonical evidence keys.
+
+        `trace_text` and `context` are the redacted texts the judge saw, which
+        is what the excerpt must be quoted from.
+        """
+        positive = cls._validated_positive(mode, result)
+        if not positive:
+            return Verdict(positive=False, extra=result)
+        excerpt = _evidence(result, mode.detection.output_schema or {})
+        if excerpt is None:
+            return Verdict(positive=True, extra=result)
+        judged = trace_text if context is None else f"{trace_text}\n{context}"
+        return Verdict(
+            positive=True,
+            extra={**result, "excerpt": excerpt, "excerpt_verified": _appears_in(excerpt, judged)},
+        )
 
     @staticmethod
     def _validated_positive(mode: Mode, result: dict[str, Any]) -> bool:
@@ -182,3 +222,52 @@ class LLMJudgeDetector(Detector):
                 }
             },
         }
+
+
+def _evidence(result: dict[str, Any], output_schema: dict[str, Any]) -> str | None:
+    """The judge's evidence text for one verdict, or None if it gave none.
+
+    `excerpt` wins when the judge returned one (declared or not). Otherwise
+    it is the first non-blank string among the other properties the schema
+    declares, in declaration order — `ungrounded_excerpt`, `repeated_step`,
+    and the like — so existing rubrics need no edits. Non-string evidence
+    (e.g. an integer `staleness_days`) is skipped.
+    """
+    properties = output_schema.get("properties")
+    declared = (
+        [name for name in properties if name not in _NON_EVIDENCE_KEYS]
+        if isinstance(properties, dict)
+        else []
+    )
+    for name in ("excerpt", *declared):
+        value = result.get(name)
+        if isinstance(value, str) and value.strip():
+            return value
+    return None
+
+
+def _appears_in(excerpt: str, judged_text: str) -> bool:
+    """Whether `excerpt` occurs in `judged_text`, the redacted text the judge saw.
+
+    The excerpt gets the same `redact()` pass as the judge's input. Matching
+    ignores case, whitespace runs, curly-vs-straight quotes and wrapping quote
+    marks; an elided quote (`first part ... later part`) matches when its
+    parts occur in that order. Anything else — a paraphrase, a label, an
+    invented quote — does not match.
+    """
+    haystack = _normalize(judged_text)
+    parts = [part.strip("\"'` ") for part in _ELISION_RE.split(_normalize(redact(excerpt)))]
+    parts = [part for part in parts if part]
+    if not parts:
+        return False
+    position = 0
+    for part in parts:
+        found = haystack.find(part, position)
+        if found == -1:
+            return False
+        position = found + len(part)
+    return True
+
+
+def _normalize(text: str) -> str:
+    return " ".join(text.translate(_STRAIGHT_QUOTES).split()).casefold()

@@ -223,7 +223,7 @@ serialization.
 | `from_otlp` / `to_otlp` | lossless OTLP JSON ↔ `OpenInferenceTrace` |
 | `Classification` | one detector × one trace: `trace_id, rubric_version, mode_id, positive, extra, duration_ms, error` (error set ⇒ positive False) |
 | `Annotation` | backend-bound classification: adds `run_id, severity, confidence, excerpt`; `idempotency_key()` = `trace_id\|run_id\|rubric_version\|mode_id` |
-| `Cluster`, `ClusterStats` | `cluster_id, mode_id, severity, member_trace_ids, representative_trace_id, representative_excerpt, stats(size, min/max/mean confidence)`; `compute_cluster_id()` is deterministic |
+| `Cluster`, `ClusterStats` | `cluster_id, mode_id, severity, member_trace_ids, representative_trace_id, representative_excerpt, representative_excerpt_verified, stats(size, min/max/mean confidence)`; `representative_excerpt_verified` is `False` when the judge's excerpt isn't in the trace, `None` when there was no judge excerpt to check; `compute_cluster_id()` is deterministic |
 | `IssueDraft` | `cluster_id, mode_id, rubric_version, run_id, severity, representative_trace_id, member_trace_ids, title, body, labels` — body ends with the provenance comment |
 | `IssueProvenance` | parse/emit the `<!-- docket:provenance {...} -->` block (`parse_from_body`) |
 | `Issue`, `IssuePatch`, `IssueListing` | tracker-side shapes; `IssueListing.truncated` is the dedup-safety flag |
