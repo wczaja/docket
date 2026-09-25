@@ -222,6 +222,22 @@ def test_per_mode_model_override_changes_estimate() -> None:
     assert overridden.estimated_usd == pytest.approx(15 * base.estimated_usd, rel=1e-6)
 
 
+def test_provider_uri_override_is_priced_as_its_model() -> None:
+    """Rubric overrides are `provider:model` URIs (what build_provider accepts);
+    the price table is keyed by model name."""
+    base = estimate_cost(
+        trace_count=100,
+        rubric=_rubric([_judge_mode("judge-a")]),
+        model="claude-haiku-4-5-20251001",
+    )
+    overridden = estimate_cost(
+        trace_count=100,
+        rubric=_rubric([_judge_mode("judge-a", model="anthropic:claude-opus-4-7")]),
+        model="claude-haiku-4-5-20251001",
+    )
+    assert overridden.estimated_usd == pytest.approx(15 * base.estimated_usd, rel=1e-6)
+
+
 def test_per_mode_override_in_composite_priced_with_own_model() -> None:
     base = estimate_cost(
         trace_count=10,

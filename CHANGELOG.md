@@ -22,6 +22,11 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   makes (a composite's judges run once per trace each), and tokens and
   dollars are priced per trace judged: a batched call still carries every
   trace's text and verdict, so batching cuts calls, not the estimate.
+- **Per-mode `model:` overrides are priced at their own model's rate.**
+  Overrides are `provider:model` URIs (`anthropic:claude-opus-4-7`) but
+  the price table is keyed by model name, so every override fell back to
+  the default model's rate in `--dry-run` and the cost gate: an Opus
+  judge on a Haiku run was priced 15× low.
 - `scripts/benchmark_classify.py` crashed on a stale `estimate_cost`
   call; it now also answers batched calls and reports trace judgments,
   and `docs/benchmarks.md` is re-measured with it.

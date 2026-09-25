@@ -20,8 +20,9 @@ instructions and schema that a batched call sends once instead of per trace
 retries or from re-judging a batched verdict alone after it fails
 validation.
 
-Each judge is priced at its own `model:` override when that model is in
-the price table, falling back to the run's default model otherwise.
+Each judge is priced at its own `model:` override (a `provider:model` URI,
+looked up by its model part) when that model is in the price table,
+falling back to the run's default model otherwise.
 
 Token shape per trace judged, i.e. per unbatched call (measured
 empirically against the 60-trace fixture):
@@ -76,6 +77,11 @@ def _judge_detections(detection: Detection) -> list[Detection]:
     if detection.type == "composite" and detection.operands:
         return [judge for op in detection.operands for judge in _judge_detections(op)]
     return []
+
+
+def _model_name(model_uri: str) -> str:
+    """The price-table key for a `model:` override: `anthropic:claude-x` -> `claude-x`."""
+    return model_uri.split(":", 1)[-1]
 
 
 def llm_judge_modes(rubric: Rubric) -> list[Mode]:
@@ -163,7 +169,9 @@ def estimate_cost(
         else:
             total_calls += trace_count * len(judges)
         for judge in judges:
-            pricing = _PRICE_TABLE.get(judge.model) if judge.model is not None else None
+            pricing = (
+                _PRICE_TABLE.get(_model_name(judge.model)) if judge.model is not None else None
+            )
             if pricing is None:
                 if default_pricing is None:
                     default_pricing = _PRICE_TABLE.get(model)
