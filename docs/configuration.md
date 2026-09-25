@@ -38,8 +38,10 @@ rubric: docket.dev/builtin/agents/v1
 
 # Optional knobs (defaults shown):
 max_traces_per_run: 1000          # hard cap on effective workload; > 0
-max_estimated_cost_usd: null      # dollar ceiling on the pre-flight estimate;
-                                  # when set, EVERY run is gated, not just --dry-run
+max_estimated_cost_usd: null      # dollar ceiling on the pre-flight estimate
+                                  # (priced per trace judged, so --batch doesn't
+                                  # lower it); when set, EVERY run is gated,
+                                  # not just --dry-run
 auto_post_threshold: never        # critical | high | medium | low | never
 instrumentation_backend: null     # MCP block for self-instrumentation (reserved;
                                   # the CLI's --instrument-to flag is the v1 surface)
@@ -100,6 +102,7 @@ silent fallback.
 | Judge model (openai) | `gpt-4o-mini` | `docket.llm.DEFAULT_OPENAI_MODEL` |
 | Embedding model | `text-embedding-3-small` | `docket.llm.DEFAULT_OPENAI_EMBEDDING_MODEL` (rubrics can override via `clustering.embedding_model`) |
 | Classification concurrency | 8 | `--concurrency` |
+| Judge batching | off (`1`) | `--batch N`: up to N traces per `llm_judge` call; cuts calls, not the cost estimate |
 | Classifier retries | 3, exponential backoff | then the trace is marked unprocessed, run continues |
 | Backend write retries | 5 | then the run aborts (no partial-write runs) |
 | Trace cap | 1000 | `max_traces_per_run` / `--max-traces` |

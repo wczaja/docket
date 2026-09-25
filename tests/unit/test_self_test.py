@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 from docket.llm.base import ModelProvider
@@ -181,3 +182,107 @@ async def test_self_test_modes_without_examples_are_ignored() -> None:
     provider = _StubProvider({})
     results = await run_self_test(rubric, provider)
     assert results == []
+
+
+class _BatchAwareStub(ModelProvider):
+    """Judges examples by marker in single and batched calls; records traces per call.
+
+    Examples containing `bad` get a schema-violating verdict in batched calls
+    (and in single calls too when `bad_alone` is set).
+    """
+
+    def __init__(self, bad: str | None = None, *, bad_alone: bool = False) -> None:
+        self.model = "stub:1"
+        self.calls: list[int] = []
+        self._bad = bad
+        self._bad_alone = bad_alone
+
+    async def structured_complete(
+        self, system: str, user: str, schema: dict[str, Any]
+    ) -> dict[str, Any]:
+        wrapper = schema.get("properties", {}).get("verdicts")
+        if wrapper is None:
+            self.calls.append(1)
+            return self._verdict(user, batched=False)
+        blocks = re.split(r"=== Trace \d+ ===\n", user)[1:]
+        self.calls.append(len(blocks))
+        return {"verdicts": [self._verdict(b, batched=True) for b in blocks]}
+
+    def _verdict(self, text: str, *, batched: bool) -> dict[str, Any]:
+        if self._bad is not None and self._bad in text and (batched or self._bad_alone):
+            return {"positive": "maybe"}
+        return {"positive": "POS_EXAMPLE" in text}
+
+
+def _judge_rubric(n_examples: int) -> Rubric:
+    return Rubric(
+        apiVersion="docket.dev/v1",
+        kind="Rubric",
+        metadata=RubricMetadata(name="batched-self-test", version="1.0.0"),
+        modes=[
+            Mode(
+                id="judge",
+                severity="high",
+                detection=Detection(
+                    type="llm_judge",
+                    prompt="Detect the failure.",
+                    output_schema={
+                        "type": "object",
+                        "required": ["positive"],
+                        "properties": {"positive": {"type": "boolean"}},
+                    },
+                ),
+                examples=[
+                    Example(trace_excerpt=f"POS_EXAMPLE-{i}", expected="positive")
+                    if i % 2 == 0
+                    else Example(trace_excerpt=f"NEG_EXAMPLE-{i}", expected="negative")
+                    for i in range(n_examples)
+                ],
+            )
+        ],
+    )
+
+
+async def test_self_test_batches_llm_judge_examples() -> None:
+    provider = _BatchAwareStub()
+    results = await run_self_test(_judge_rubric(5), provider, batch_size=2)
+    assert provider.calls == [2, 2, 1]
+    assert [r.example_index for r in results] == [0, 1, 2, 3, 4]
+    assert all(r.passed and not r.skipped for r in results)
+    assert all("judged alone" not in r.message for r in results)
+
+
+async def test_self_test_rejudges_unusable_batched_verdict_alone() -> None:
+    provider = _BatchAwareStub(bad="NEG_EXAMPLE-1")
+    results = await run_self_test(_judge_rubric(3), provider, batch_size=8)
+    assert provider.calls == [3, 1]
+    assert all(r.passed for r in results)
+    assert "judged alone after its batched verdict failed" in results[1].message
+    assert "violates `output_schema`" in results[1].message
+    assert "judged alone" not in results[0].message + results[2].message
+
+
+async def test_self_test_reports_error_when_solo_attempt_also_fails() -> None:
+    provider = _BatchAwareStub(bad="NEG_EXAMPLE-1", bad_alone=True)
+    results = await run_self_test(_judge_rubric(3), provider, batch_size=8)
+    assert [r.passed for r in results] == [True, False, True]
+    assert results[1].message.startswith("error: ")
+    assert "judged alone after its batched verdict failed" in results[1].message
+
+
+async def test_self_test_batch_size_one_makes_one_call_per_example() -> None:
+    provider = _BatchAwareStub(bad="NEG_EXAMPLE-1")
+    results = await run_self_test(_judge_rubric(3), provider, batch_size=1)
+    assert provider.calls == [1, 1, 1]
+    # Unbatched, `bad` only breaks batched verdicts, so every example passes.
+    assert all(r.passed for r in results)
+
+
+async def test_self_test_regex_examples_ignore_batch_size() -> None:
+    provider = _StubProvider(
+        {"POS_EXAMPLE": {"positive": True}, "NEG_EXAMPLE": {"positive": False}}
+    )
+    results = await run_self_test(_rubric_with_examples(), provider, batch_size=8)
+    regex_result = next(r for r in results if r.mode_id == "regex-mode")
+    assert regex_result.passed
+    assert not regex_result.skipped

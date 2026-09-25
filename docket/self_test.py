@@ -6,6 +6,11 @@ is checked against `expected`. `tool_call` and `metric_threshold` (and
 `composite`) modes are reported as skipped with an explicit reason — they
 need structured traces (tool-call records, metrics) that the `examples:`
 shape cannot express.
+
+With `batch_size > 1`, each `llm_judge` mode's examples are judged
+`batch_size` per provider call. An example whose batched verdict is
+unusable is judged again on its own, the one attempt an unbatched run makes,
+and its message says so.
 """
 
 from dataclasses import dataclass
@@ -14,8 +19,8 @@ from docket.detectors import get_detector
 from docket.detectors.base import Detector
 from docket.errors import DetectionError
 from docket.llm.base import ModelProvider
-from docket.models.trace import TraceLike
-from docket.rubric.spec import Mode, Rubric
+from docket.models.trace import TraceLike, Verdict
+from docket.rubric.spec import Example, Mode, Rubric
 
 _SKIP_REASONS: dict[str, str] = {
     "tool_call": (
@@ -59,8 +64,10 @@ async def run_self_test(
             detector: Detector = get_detector(
                 "llm_judge", llm_provider=default_provider, batch_size=batch_size
             )
+            examples_per_call = batch_size
         elif detection_type == "regex":
             detector = get_detector("regex")
+            examples_per_call = 1
         else:
             results.append(
                 SelfTestResult(
@@ -75,39 +82,53 @@ async def run_self_test(
                 )
             )
             continue
-        results.extend(await _run_mode_examples(mode, detector))
+        results.extend(await _run_mode_examples(mode, detector, examples_per_call))
     return results
 
 
-async def _run_mode_examples(mode: Mode, detector: Detector) -> list[SelfTestResult]:
+async def _run_mode_examples(
+    mode: Mode,
+    detector: Detector,
+    examples_per_call: int,
+) -> list[SelfTestResult]:
     results: list[SelfTestResult] = []
-    for i, example in enumerate(mode.examples):
-        trace = TraceLike(full_text=example.trace_excerpt, context=example.context)
-        try:
-            verdict = await detector.evaluate(mode, trace)
-        except DetectionError as e:
-            results.append(
-                SelfTestResult(
-                    mode_id=mode.id,
-                    example_index=i,
-                    passed=False,
-                    skipped=False,
-                    message=f"error: {e}",
-                )
-            )
-            continue
-        expected_positive = example.expected == "positive"
-        passed = verdict.positive == expected_positive
-        results.append(
-            SelfTestResult(
-                mode_id=mode.id,
-                example_index=i,
-                passed=passed,
-                skipped=False,
-                message=(
-                    f"expected {example.expected}, "
-                    f"got {'positive' if verdict.positive else 'negative'}"
-                ),
-            )
-        )
+    examples = list(enumerate(mode.examples))
+    for start in range(0, len(examples), examples_per_call):
+        chunk = examples[start : start + examples_per_call]
+        traces = [TraceLike(full_text=ex.trace_excerpt, context=ex.context) for _, ex in chunk]
+        outcomes = await detector.evaluate_batch_isolated(mode, traces)
+        for (i, example), trace, outcome in zip(chunk, traces, outcomes, strict=True):
+            note = ""
+            if isinstance(outcome, DetectionError) and len(chunk) > 1:
+                note = f" (judged alone after its batched verdict failed: {outcome})"
+                (outcome,) = await detector.evaluate_batch_isolated(mode, [trace])
+            results.append(_example_result(mode, i, example, outcome, note))
     return results
+
+
+def _example_result(
+    mode: Mode,
+    index: int,
+    example: Example,
+    outcome: Verdict | DetectionError,
+    note: str,
+) -> SelfTestResult:
+    if isinstance(outcome, DetectionError):
+        return SelfTestResult(
+            mode_id=mode.id,
+            example_index=index,
+            passed=False,
+            skipped=False,
+            message=f"error: {outcome}{note}",
+        )
+    expected_positive = example.expected == "positive"
+    return SelfTestResult(
+        mode_id=mode.id,
+        example_index=index,
+        passed=outcome.positive == expected_positive,
+        skipped=False,
+        message=(
+            f"expected {example.expected}, "
+            f"got {'positive' if outcome.positive else 'negative'}{note}"
+        ),
+    )

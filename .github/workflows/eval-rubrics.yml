@@ -17,12 +17,14 @@ on:
     paths:
       - "docket/rubric/**"
       - "docket/detectors/**"
+      - "docket/self_test.py"
       - "rubrics/**"
       - ".github/workflows/eval-rubrics.yml"
   pull_request:
     paths:
       - "docket/rubric/**"
       - "docket/detectors/**"
+      - "docket/self_test.py"
       - "rubrics/**"
       - ".github/workflows/eval-rubrics.yml"
   workflow_dispatch:
@@ -74,6 +76,8 @@ jobs:
       - name: Install package
         run: uv pip install --system -e .
       - name: Self-test builtin + example + registry rubrics against a live judge
+        # --batch 8 judges up to 8 of a mode's examples per call; an example
+        # whose batched verdict fails validation is re-judged alone.
         run: |
           set -euo pipefail
           for name in agents rag routing multi-agent mast; do

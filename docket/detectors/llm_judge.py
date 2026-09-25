@@ -11,7 +11,10 @@ completion runs (design §4).
 Batching: `evaluate_batch` groups up to `batch_size` traces per provider call.
 For a batch of N, the schema is wrapped as `{verdicts: [item_schema] * N}` and
 the prompt blocks the traces with explicit numbering so the model emits one
-verdict per trace in order.
+verdict per trace in order. `evaluate_batch` raises if any verdict in a batch
+is unusable; `evaluate_batch_isolated` (what the classifier's budget mode
+uses) validates each verdict on its own, so one bad entry doesn't cost the
+rest of its batch their verdicts.
 """
 
 from typing import Any
@@ -46,8 +49,8 @@ class LLMJudgeDetector(Detector):
         self._override_providers: dict[str, ModelProvider] = {}
 
     async def evaluate(self, mode: Mode, trace: TraceLike) -> Verdict:
-        verdicts = await self._evaluate_chunk(mode, [trace])
-        return verdicts[0]
+        entries = await self._complete(mode, [trace])
+        return self._to_verdict(mode, entries[0])
 
     async def evaluate_batch(
         self,
@@ -55,10 +58,42 @@ class LLMJudgeDetector(Detector):
         traces: list[TraceLike],
     ) -> list[Verdict]:
         all_verdicts: list[Verdict] = []
-        for start in range(0, len(traces), self._batch_size):
-            chunk = traces[start : start + self._batch_size]
-            all_verdicts.extend(await self._evaluate_chunk(mode, chunk))
+        for chunk in self._chunks(traces):
+            entries = await self._complete(mode, chunk)
+            all_verdicts.extend(self._to_verdict(mode, entry) for entry in entries)
         return all_verdicts
+
+    async def evaluate_batch_isolated(
+        self,
+        mode: Mode,
+        traces: list[TraceLike],
+    ) -> list[Verdict | DetectionError]:
+        """One provider call per `batch_size` chunk; failures stay per trace.
+
+        A call that fails, or whose response can't be split into one entry
+        per trace, fails every trace in its chunk: none of its verdicts can
+        be attributed. Otherwise each entry is validated on its own, so one
+        bad verdict leaves the rest of the chunk's verdicts intact.
+        """
+        out: list[Verdict | DetectionError] = []
+        for chunk in self._chunks(traces):
+            try:
+                entries = await self._complete(mode, chunk)
+            except DetectionError as e:
+                out.extend([e] * len(chunk))
+                continue
+            for entry in entries:
+                try:
+                    out.append(self._to_verdict(mode, entry))
+                except DetectionError as e:
+                    out.append(e)
+        return out
+
+    def _chunks(self, traces: list[TraceLike]) -> list[list[TraceLike]]:
+        return [
+            traces[start : start + self._batch_size]
+            for start in range(0, len(traces), self._batch_size)
+        ]
 
     def _resolve_provider(self, mode: Mode) -> ModelProvider:
         if mode.detection.model is None:
@@ -71,7 +106,13 @@ class LLMJudgeDetector(Detector):
             self._override_providers[mode.detection.model] = cached
         return cached
 
-    async def _evaluate_chunk(self, mode: Mode, traces: list[TraceLike]) -> list[Verdict]:
+    async def _complete(self, mode: Mode, traces: list[TraceLike]) -> list[Any]:
+        """Judge `traces` in one provider call; return one raw entry per trace.
+
+        Raises `DetectionError` if the mode lacks a prompt or schema, the call
+        fails, or a batched response isn't a `verdicts` array with exactly
+        one entry per trace. Entries are validated by `_to_verdict`.
+        """
         d = mode.detection
         if d.prompt is None or d.output_schema is None:
             raise DetectionError(
@@ -88,7 +129,7 @@ class LLMJudgeDetector(Detector):
                 user=user,
                 schema=d.output_schema,
             )
-            return [Verdict(positive=self._validated_positive(mode, result), extra=result)]
+            return [result]
         batch_schema = self._wrap_schema_for_batch(d.output_schema, len(traces))
         user = self._build_batch_prompt(d.prompt, redacted, contexts)
         result = await provider.structured_complete(
@@ -106,12 +147,13 @@ class LLMJudgeDetector(Detector):
                 f"Mode {mode.id!r}: expected {len(traces)} verdicts, "
                 f"provider returned {len(verdicts_data)}"
             )
-        out: list[Verdict] = []
-        for v in verdicts_data:
-            if not isinstance(v, dict):
-                raise DetectionError(f"Mode {mode.id!r}: batched verdict was not an object")
-            out.append(Verdict(positive=self._validated_positive(mode, v), extra=v))
-        return out
+        return verdicts_data
+
+    @classmethod
+    def _to_verdict(cls, mode: Mode, entry: Any) -> Verdict:
+        if not isinstance(entry, dict):
+            raise DetectionError(f"Mode {mode.id!r}: batched verdict was not an object")
+        return Verdict(positive=cls._validated_positive(mode, entry), extra=entry)
 
     @staticmethod
     def _validated_positive(mode: Mode, result: dict[str, Any]) -> bool:
@@ -122,7 +164,7 @@ class LLMJudgeDetector(Detector):
         path. It is never defaulted to a negative verdict.
         """
         schema = mode.detection.output_schema
-        if schema is None:  # unreachable after the _evaluate_chunk guard
+        if schema is None:  # unreachable after the _complete guard
             raise DetectionError(f"Mode {mode.id!r}: llm_judge requires `output_schema`")
         try:
             jsonschema_validate(result, schema, cls=Draft202012Validator)

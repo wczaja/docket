@@ -128,13 +128,83 @@ def test_deterministic_only_rubric_ignores_unknown_default_model() -> None:
     assert est.estimated_usd == 0.0
 
 
-def test_batching_divides_call_count() -> None:
+def test_batching_divides_calls_but_not_tokens_or_cost() -> None:
     rubric = _rubric([_judge_mode("judge-a")])
     unbatched = estimate_cost(trace_count=100, rubric=rubric, model="gpt-4o-mini")
     batched = estimate_cost(trace_count=100, rubric=rubric, model="gpt-4o-mini", batch_size=8)
     assert unbatched.total_calls == 100
     assert batched.total_calls == 13  # ceil(100 / 8)
-    assert batched.estimated_usd == pytest.approx(unbatched.estimated_usd * 13 / 100, rel=1e-6)
+    # A batched call still carries every trace's text and returns every verdict.
+    assert batched.total_input_tokens == unbatched.total_input_tokens
+    assert batched.total_output_tokens == unbatched.total_output_tokens
+    assert batched.estimated_usd == pytest.approx(unbatched.estimated_usd, rel=1e-9)
+
+
+def test_composite_judges_are_never_batched() -> None:
+    est = estimate_cost(
+        trace_count=100,
+        rubric=_rubric([_judge_mode("judge-a"), _composite_judge_mode("composite")]),
+        model="gpt-4o-mini",
+        batch_size=8,
+    )
+    assert est.total_calls == 13 + 100
+
+
+def test_composite_with_two_judges_counts_and_prices_each() -> None:
+    mode = Mode(
+        id="two-judges",
+        severity="high",
+        detection=Detection(
+            type="composite",
+            operator="and",
+            operands=[
+                Detection(
+                    type="llm_judge",
+                    prompt="First opinion?",
+                    output_schema=_JUDGE_SCHEMA,
+                    model="claude-opus-4-7",
+                ),
+                Detection(
+                    type="composite",
+                    operator="or",
+                    operands=[
+                        Detection(type="regex", pattern="x"),
+                        Detection(
+                            type="llm_judge", prompt="Second opinion?", output_schema=_JUDGE_SCHEMA
+                        ),
+                    ],
+                ),
+            ],
+        ),
+    )
+    est = estimate_cost(
+        trace_count=10, rubric=_rubric([mode]), model="claude-haiku-4-5-20251001", batch_size=4
+    )
+    assert est.judge_mode_count == 1
+    assert est.total_calls == 20
+    assert est.total_input_tokens == 20 * DEFAULT_INPUT_TOKENS_PER_CALL
+    # Per trace: Opus ($15/M in, $75/M out) + Haiku ($1/M in, $5/M out).
+    per_trace = (1500 * 15 + 200 * 75 + 1500 * 1 + 200 * 5) / 1_000_000
+    assert est.estimated_usd == pytest.approx(10 * per_trace, rel=1e-9)
+
+
+def test_estimate_rejects_zero_batch_size() -> None:
+    with pytest.raises(ValueError, match="batch_size"):
+        estimate_cost(
+            trace_count=10,
+            rubric=_rubric([_judge_mode("judge-a")]),
+            model="gpt-4o-mini",
+            batch_size=0,
+        )
+
+
+def test_render_says_batching_cuts_calls_not_the_estimate() -> None:
+    rubric = _rubric([_judge_mode("judge-a")])
+    unbatched = estimate_cost(trace_count=10, rubric=rubric, model="gpt-4o-mini").render()
+    batched = estimate_cost(trace_count=10, rubric=rubric, model="gpt-4o-mini", batch_size=8)
+    assert "Batching cuts calls" not in unbatched
+    assert "= 2 LLM calls" in batched.render()
+    assert "Batching cuts calls, not this estimate" in batched.render()
 
 
 def test_per_mode_model_override_changes_estimate() -> None:
@@ -149,6 +219,22 @@ def test_per_mode_model_override_changes_estimate() -> None:
         model="claude-haiku-4-5-20251001",
     )
     # Opus is 15× Haiku on both input and output rates.
+    assert overridden.estimated_usd == pytest.approx(15 * base.estimated_usd, rel=1e-6)
+
+
+def test_provider_uri_override_is_priced_as_its_model() -> None:
+    """Rubric overrides are `provider:model` URIs (what build_provider accepts);
+    the price table is keyed by model name."""
+    base = estimate_cost(
+        trace_count=100,
+        rubric=_rubric([_judge_mode("judge-a")]),
+        model="claude-haiku-4-5-20251001",
+    )
+    overridden = estimate_cost(
+        trace_count=100,
+        rubric=_rubric([_judge_mode("judge-a", model="anthropic:claude-opus-4-7")]),
+        model="claude-haiku-4-5-20251001",
+    )
     assert overridden.estimated_usd == pytest.approx(15 * base.estimated_usd, rel=1e-6)
 
 

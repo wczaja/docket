@@ -18,6 +18,7 @@ from docket.adapters.trace.phoenix import PhoenixAdapter
 from docket.agent.triage import run_triage_pipeline
 from docket.rubric.loader import load_rubric
 
+
 async def main() -> None:
     backend = PhoenixAdapter(base_url="http://localhost:6006")
     rubric = load_rubric("docket.dev/builtin/agents/v1")
@@ -35,6 +36,7 @@ async def main() -> None:
     print(result.report_markdown)
     for cluster in result.clusters:
         print(cluster.mode_id, cluster.stats.size, cluster.representative_trace_id)
+
 
 asyncio.run(main())
 ```
@@ -58,8 +60,8 @@ wrapper around this). All parameters keyword-only:
 | `since`, `until` | `datetime` (required) | the window; use tz-aware UTC |
 | `llm_provider` | `ModelProvider \| None` | judge provider; default `anthropic:claude-haiku-4-5-20251001` |
 | `embedding_provider` | `EmbeddingProvider \| None` | clustering embeddings; default `openai:text-embedding-3-small`, credentials preflighted before classification |
-| `batch_size` | `int = 1` | traces per judge call |
-| `concurrency` | `int = 8` | parallel trace classification |
+| `batch_size` | `int = 1` | traces per `llm_judge` call (budget mode; judges inside composites stay per trace) |
+| `concurrency` | `int = 8` | LLM calls in flight (parallel traces, or batched judge calls) |
 | `write_annotations` | `bool = False` | backend writeback (read-only by default) |
 | `run_id` | `str \| None` | default: `compute_run_id(...)` — deterministic, idempotent re-runs |
 | `backend_id` | `str = "phoenix"` | label used in run_id derivation and logs |
@@ -112,8 +114,9 @@ from docket.adapters.tracker.github import GitHubAdapter
 PhoenixAdapter(base_url, api_key=None, max_list_pages=...)
 LangfuseAdapter(host, public_key=None, secret_key=None, max_list_pages=...)
 LangsmithAdapter(endpoint, api_key, project=None, max_list_pages=...)
-JiraAdapter(host, project, email=None, api_token=None, pat=None,
-            deployment=None, max_list_pages=...)   # deployment: "cloud"|"datacenter"|None=auto
+JiraAdapter(
+    host, project, email=None, api_token=None, pat=None, deployment=None, max_list_pages=...
+)  # deployment: "cloud"|"datacenter"|None=auto
 LinearAdapter(team_id, api_key, endpoint=..., max_list_pages=...)
 GitHubAdapter(owner, repo, token, api_url=..., max_list_pages=...)
 ```
@@ -158,14 +161,18 @@ async def close() -> None
 
 ```python
 from docket.llm import (
-    build_provider, build_embedding_provider,
-    ModelProvider, AnthropicProvider, OpenAIProvider,
-    EmbeddingProvider, OpenAIEmbeddingProvider,
-    DEFAULT_PROVIDER_URI,    # "anthropic:claude-haiku-4-5-20251001"
-    DEFAULT_EMBEDDING_URI,   # "openai:text-embedding-3-small"
+    build_provider,
+    build_embedding_provider,
+    ModelProvider,
+    AnthropicProvider,
+    OpenAIProvider,
+    EmbeddingProvider,
+    OpenAIEmbeddingProvider,
+    DEFAULT_PROVIDER_URI,  # "anthropic:claude-haiku-4-5-20251001"
+    DEFAULT_EMBEDDING_URI,  # "openai:text-embedding-3-small"
 )
 
-provider = build_provider("anthropic:claude-sonnet-4-6")   # "provider:model" URI
+provider = build_provider("anthropic:claude-sonnet-4-6")  # "provider:model" URI
 embedder = build_embedding_provider(DEFAULT_EMBEDDING_URI)
 ```
 
@@ -188,19 +195,23 @@ from docket.agent.subagents.classifier import Classifier
 
 classifier = Classifier(provider, batch_size=1, concurrency=8)
 results = await classifier.classify_all(
-    [(trace_id, open_inference_trace), ...], rubric,
-)   # -> dict[trace_id, list[Classification]]
+    [(trace_id, open_inference_trace), ...],
+    rubric,
+)  # -> dict[trace_id, list[Classification]]
 ```
 
 Retries each (trace, mode) up to 3 times with backoff, then marks it
-errored rather than raising.
+errored rather than raising. With `batch_size > 1`, each `llm_judge`
+mode judges up to `batch_size` traces per call; a trace whose batched
+verdict is unusable retries alone on the same schedule. Results come
+back in input order, each trace's list in rubric mode order.
 
 ---
 
 ## Rubrics
 
 ```python
-from docket.rubric.loader import load_rubric        # resolves + merges imports
+from docket.rubric.loader import load_rubric  # resolves + merges imports
 from docket.rubric.validator import validate_rubric_yaml
 from docket.rubric.spec import Rubric, Mode, Detection
 ```
@@ -232,9 +243,12 @@ serialization.
 
 ## Cost estimation (`docket.cost`)
 
-`estimate_cost(trace_count, mode_count, model, ...) -> CostEstimate`,
-`check_budget(...) -> BudgetCheck` (`.would_abort`, `.enforce()`),
-`known_models()`. The same functions `--dry-run` uses.
+`estimate_cost(*, trace_count, rubric, model, batch_size=1, ...) ->
+CostEstimate` (`.total_calls`, `.estimated_usd`, `.render()`),
+`llm_judge_modes(rubric)`, `known_models()` — what `--dry-run` and the
+`max_estimated_cost_usd` gate use. `total_calls` counts the calls the
+classifier makes; tokens and dollars are per trace judged, so
+`batch_size` lowers the call count but not the cost.
 
 ## Errors (`docket.errors`)
 
