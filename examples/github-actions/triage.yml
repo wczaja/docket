@@ -25,7 +25,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           # Embeddings for clustering. Alternatively set VOYAGE_API_KEY and
-          # pass --embedding-provider voyage.
+          # pass --embedding voyage:voyage-3.5-lite.
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           # PAT with Issues:write on the target repo (NOT the default
           # workflow token, which is scoped to this repo only).

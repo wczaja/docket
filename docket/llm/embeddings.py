@@ -3,8 +3,10 @@
 The project keeps classification and clustering separate: LLM-as-judge for
 classification, embeddings for clustering, never mixed. Embeddings live behind
 their own ABC + provider implementations so the classifier (`ModelProvider`)
-and the clusterer (`EmbeddingProvider`) stay decoupled. Each can be configured
-independently in a rubric.
+and the clusterer (`EmbeddingProvider`) stay decoupled. Each is configured
+independently: the judge via `--provider`/`--model` (or a mode's `model:`),
+embeddings via `--embedding provider:model`. A rubric's
+`clustering.embedding_model` is not read.
 
 Three providers ship in-tree: `OpenAIEmbeddingProvider` (default),
 `VoyageEmbeddingProvider` (plain HTTP, no extra dependency), and
