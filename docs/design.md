@@ -424,7 +424,7 @@ Until those phases land, **the practical recommendation is to use the determinis
 - Output: list of `(mode_id, positive, confidence, evidence_excerpt)` tuples
 - Implementation: for each mode in the rubric, evaluate the detection. For `llm_judge`, this is a structured LLM call with the rubric's prompt and output schema. For deterministic detectors (`regex`, `tool_call`, `metric_threshold`), this is pure Python.
 - Concurrency: traces are classified in parallel (configurable, default 8 concurrent)
-- Costs: this is the single largest cost driver. The classifier MUST support a budget mode that batches multiple traces into a single LLM call when the rubric is small enough.
+- Costs: this is the single largest cost driver. The classifier MUST support a budget mode that batches multiple traces into a single LLM call when the rubric is small enough. (Batching cuts the call count and the prompt overhead repeated per call; each trace's own tokens are billed either way, so the pre-flight cost estimate prices traces judged, not calls.)
 
 **Clusterer subagent**
 - Input: classified traces (those with at least one positive mode), the rubric

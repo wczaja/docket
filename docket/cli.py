@@ -473,6 +473,21 @@ def init(config_out: Path, force: bool) -> None:
     click.echo(f"  docket run --config {config_out} --since 1h             # real run")
 
 
+_BATCH_HELP = (
+    "Budget mode: traces per llm_judge call. >1 judges up to N traces in one "
+    "structured-output call: up to N× fewer calls and less repeated prompt "
+    "overhead, at some accuracy risk for long traces. Each trace's text and "
+    "verdict are still billed, so the --dry-run cost estimate doesn't drop. "
+    "Judges inside composite modes run one trace per call. Default: 1."
+)
+_CONCURRENCY_HELP = (
+    "Max LLM calls in flight: traces classified in parallel, or with --batch, "
+    "batched judge calls. Default: 8. Lower this (e.g. 1-2) if your LLM provider "
+    "tier has a tight requests-per-minute limit; unbatched, the classifier issues "
+    "one structured-output call per (trace, llm_judge mode) pair."
+)
+
+
 @main.command()
 @click.option(
     "--rubric",
@@ -637,9 +652,7 @@ def init(config_out: Path, force: bool) -> None:
     "batch_size",
     default=1,
     type=click.IntRange(1, 32),
-    help="Traces per llm_judge LLM call (budget mode). >1 batches multiple "
-    "traces into one structured-output call, cutting cost roughly "
-    "proportionally at some accuracy risk for long traces. Default: 1.",
+    help=_BATCH_HELP,
 )
 @click.option(
     "--provider",
@@ -656,9 +669,7 @@ def init(config_out: Path, force: bool) -> None:
     "--concurrency",
     default=8,
     type=click.IntRange(1, 64),
-    help="Max traces classified in parallel. Default: 8. Lower this (e.g. 1-2) "
-    "if your LLM provider tier has a tight requests-per-minute limit; the "
-    "classifier issues one structured-output call per (trace, mode) pair.",
+    help=_CONCURRENCY_HELP,
 )
 @click.option(
     "--run-id",
@@ -1111,9 +1122,9 @@ async def _run_via_deep_agent(
     "batch_size",
     default=1,
     type=click.IntRange(1, 32),
-    help="Traces per llm_judge LLM call (budget mode). >1 batches multiple "
-    "traces into one structured-output call, cutting cost roughly "
-    "proportionally at some accuracy risk for long traces. Default: 1.",
+    help="Examples per llm_judge call. >1 judges up to N of a mode's examples "
+    "in one structured-output call; an example whose batched verdict fails "
+    "validation is re-judged alone, and its line says so. Default: 1.",
 )
 @click.option(
     "--provider",
@@ -1589,7 +1600,7 @@ _SHARED_PIPELINE_OPTIONS: list[Any] = [
         default=False,
         help="Write annotations back to the backend. Default: read-only.",
     ),
-    click.option("--batch", "batch_size", default=1, type=click.IntRange(1, 32)),
+    click.option("--batch", "batch_size", default=1, type=click.IntRange(1, 32), help=_BATCH_HELP),
     click.option(
         "--provider",
         type=click.Choice(["anthropic", "openai"]),
@@ -1605,9 +1616,7 @@ _SHARED_PIPELINE_OPTIONS: list[Any] = [
         "--concurrency",
         default=8,
         type=click.IntRange(1, 64),
-        help="Max traces classified in parallel. Default: 8. Lower this (e.g. 1-2) "
-        "if your LLM provider tier has a tight requests-per-minute limit; the "
-        "classifier issues one structured-output call per (trace, mode) pair.",
+        help=_CONCURRENCY_HELP,
     ),
     click.option(
         "--queue-dir",

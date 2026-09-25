@@ -132,8 +132,8 @@ docket run --backend phoenix --phoenix-url http://localhost:6006 \
 |---|---|---|
 | `--provider {anthropic|openai}` | `anthropic` | Judge provider for `llm_judge` modes without their own `model:` |
 | `--model TEXT` | `claude-haiku-4-5-20251001` / `gpt-4o-mini` | Override the provider's default model |
-| `--concurrency 1..64` | `8` | Traces classified in parallel; lower it on tight rate-limit tiers |
-| `--batch 1..32` | `1` | Traces batched per LLM call (budget mode for small rubrics) |
+| `--concurrency 1..64` | `8` | LLM calls in flight: traces classified in parallel, or with `--batch`, batched judge calls; lower it on tight rate-limit tiers |
+| `--batch 1..32` | `1` | Budget mode: each `llm_judge` mode judges up to N traces per call, so up to N× fewer calls. Each trace's text and verdict are still billed, so the `--dry-run` cost estimate doesn't drop (the shared prompt overhead is a smaller, unestimated saving). A trace whose batched verdict is unusable (the call failed, or its entry failed validation) is re-judged alone with the usual retries; judges inside `composite` modes run one trace per call |
 
 ### Clustering
 
@@ -235,7 +235,7 @@ drift.
 |---|---|---|
 | `--provider {anthropic|openai}` | `anthropic` | Judge provider for modes without their own `model:` |
 | `--model TEXT` | provider default | Model override |
-| `--batch 1..32` | `1` | Examples per LLM call |
+| `--batch 1..32` | `1` | Examples per `llm_judge` call. An example whose batched verdict fails validation is re-judged alone, and its line says so |
 
 Output is one `PASS`/`FAIL`/`SKIP` line per example (v1.0 exercises
 `llm_judge` examples; deterministic-mode examples report SKIP). Exit 1

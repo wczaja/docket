@@ -649,6 +649,28 @@ async def test_pipeline_aborts_when_estimated_cost_exceeds_gate(tmp_path: Path) 
     assert backend.get_trace_calls == 0
 
 
+async def test_batching_does_not_slip_a_run_under_the_cost_gate(tmp_path: Path) -> None:
+    """A batched call is still billed for every trace it judges, so --batch
+    must not discount the gate's estimate (it once divided it by batch_size)."""
+    backend = _RecordingBackend({f"t-{i}": _trace(f"t-{i}", "hello") for i in range(16)})
+    provider = _MockLLMProvider()
+    provider.model = "gpt-4o-mini"
+    # 16 traces judged ≈ $0.0055; pricing batch 8 as 2 calls would be ≈ $0.0007.
+    with pytest.raises(BudgetExceededError, match="max_estimated_cost_usd"):
+        await run_triage_pipeline(
+            backend=backend,
+            rubric=_judge_rubric(),
+            since=datetime(2026, 5, 22, 0, 0, 0, tzinfo=UTC),
+            until=datetime(2026, 5, 22, 1, 0, 0, tzinfo=UTC),
+            llm_provider=provider,
+            embedding_provider=_MockEmbeddingProvider(),
+            output_dir=tmp_path,
+            batch_size=8,
+            max_estimated_cost_usd=0.001,
+        )
+    assert backend.get_trace_calls == 0
+
+
 async def test_cost_gate_allows_deterministic_only_rubric(tmp_path: Path) -> None:
     backend = _FakeBackend({"t-1": _trace("t-1", "hello")})
     result = await run_triage_pipeline(

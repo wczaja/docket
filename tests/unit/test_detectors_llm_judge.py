@@ -7,7 +7,7 @@ from docket.detectors import llm_judge as llm_judge_module
 from docket.detectors.llm_judge import LLMJudgeDetector
 from docket.errors import DetectionError
 from docket.llm.base import ModelProvider
-from docket.models.trace import TraceLike
+from docket.models.trace import TraceLike, Verdict
 from docket.rubric.spec import Detection, Mode
 
 
@@ -309,3 +309,75 @@ async def test_per_mode_model_override_provider_is_cached(
     await detector.evaluate(mode, trace)
     await detector.evaluate(mode, trace)
     assert built == ["anthropic:claude-test"]
+
+
+async def test_batch_isolated_keeps_valid_verdicts_around_bad_entries() -> None:
+    provider = MockProvider(
+        [
+            {
+                "verdicts": [
+                    {"positive": True},
+                    {"positive": "yes"},
+                    "not-an-object",
+                    {"positive": False},
+                ]
+            }
+        ]
+    )
+    detector = LLMJudgeDetector(provider, batch_size=8)
+    outcomes = await detector.evaluate_batch_isolated(
+        _llm_judge_mode(), [TraceLike(full_text=t) for t in "abcd"]
+    )
+    assert len(provider.calls) == 1
+    first, bad_schema, not_object, last = outcomes
+    assert isinstance(first, Verdict)
+    assert first.positive
+    assert isinstance(bad_schema, DetectionError)
+    assert "violates `output_schema`" in str(bad_schema)
+    assert isinstance(not_object, DetectionError)
+    assert "not an object" in str(not_object)
+    assert isinstance(last, Verdict)
+    assert not last.positive
+
+
+async def test_batch_isolated_unsplittable_response_fails_only_its_chunk() -> None:
+    provider = MockProvider(
+        [
+            {"verdicts": [{"positive": True}]},  # one verdict for a chunk of two
+            {"verdicts": [{"positive": True}, {"positive": False}]},
+        ]
+    )
+    detector = LLMJudgeDetector(provider, batch_size=2)
+    outcomes = await detector.evaluate_batch_isolated(
+        _llm_judge_mode(), [TraceLike(full_text=t) for t in "abcd"]
+    )
+    assert len(provider.calls) == 2
+    for failed in outcomes[:2]:
+        assert isinstance(failed, DetectionError)
+        assert "expected 2 verdicts" in str(failed)
+    assert [o.positive for o in outcomes[2:] if isinstance(o, Verdict)] == [True, False]
+
+
+async def test_batch_isolated_failed_call_fails_its_chunk() -> None:
+    class _Down(ModelProvider):
+        model = "down:1"
+
+        async def structured_complete(
+            self, system: str, user: str, schema: dict[str, Any]
+        ) -> dict[str, Any]:
+            raise DetectionError("provider down")
+
+    detector = LLMJudgeDetector(_Down(), batch_size=8)
+    outcomes = await detector.evaluate_batch_isolated(
+        _llm_judge_mode(), [TraceLike(full_text=t) for t in "ab"]
+    )
+    assert [str(o) for o in outcomes] == ["provider down", "provider down"]
+
+
+async def test_batch_isolated_chunk_of_one_uses_single_trace_call() -> None:
+    provider = MockProvider([{"positive": True}])
+    detector = LLMJudgeDetector(provider, batch_size=8)
+    outcomes = await detector.evaluate_batch_isolated(_llm_judge_mode(), [TraceLike(full_text="a")])
+    assert isinstance(outcomes[0], Verdict)
+    _system, _user, schema = provider.calls[0]
+    assert "verdicts" not in schema.get("properties", {})

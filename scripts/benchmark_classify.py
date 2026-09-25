@@ -53,6 +53,7 @@ class StubProvider(ModelProvider):
 
     def __init__(self, *, simulate_latency_ms: int = 0, positive_rate: float = 0.05) -> None:
         self.calls = 0
+        self.judgments = 0
         self._latency_s = simulate_latency_ms / 1000
         self._positive_rate = positive_rate
         self._rng = random.Random(42)  # noqa: S311 - benchmark, not crypto
@@ -66,6 +67,15 @@ class StubProvider(ModelProvider):
         self.calls += 1
         if self._latency_s:
             await asyncio.sleep(self._latency_s)
+        batch = schema.get("properties", {}).get("verdicts")
+        if batch is None:
+            self.judgments += 1
+            return self._verdict()
+        # --batch: one verdict per trace the call judges.
+        self.judgments += batch["minItems"]
+        return {"verdicts": [self._verdict() for _ in range(batch["minItems"])]}
+
+    def _verdict(self) -> dict[str, Any]:
         positive = self._rng.random() < self._positive_rate
         # Superset of every builtin output_schema's required properties.
         return {
@@ -152,19 +162,28 @@ async def run_benchmark(args: argparse.Namespace) -> None:
 
     print(f"rubric:              {RUBRIC_URI} ({n_modes} modes)")
     print(f"traces:              {args.traces}")
+    print(f"batch:               {args.batch}")
     print(f"concurrency:         {args.concurrency}")
     print(f"wall time:           {wall_s:.2f}s ({args.traces / wall_s:.0f} traces/s)")
     print(f"classifications:     {classifications} (positives: {positives}, errors: {errors})")
     if isinstance(provider, StubProvider):
-        print(f"LLM calls (counted): {provider.calls}")
+        print(f"LLM calls (counted): {provider.calls} ({provider.judgments} trace judgments)")
         if provider._latency_s:  # noqa: SLF001 - benchmark introspection
             print(f"simulated latency:   {args.simulate_latency_ms}ms/call")
         for model in args.cost_models:
-            est = estimate_cost(trace_count=provider.calls, mode_count=1, model=model)
+            est = estimate_cost(
+                trace_count=args.traces, rubric=rubric, model=model, batch_size=args.batch
+            )
+            # Tokens are billed per trace judged, however many calls carry them.
+            est_judgments = est.total_input_tokens // est.input_tokens_per_call
+            projected = (
+                est.estimated_usd * provider.judgments / est_judgments if est_judgments else 0.0
+            )
             print(
-                f"projected cost:      ${est.estimated_usd:.4f} on {model} "
-                f"({provider.calls} calls x ~{est.input_tokens_per_call} in / "
-                f"~{est.output_tokens_per_call} out tokens)"
+                f"projected cost:      ${projected:.4f} on {model} "
+                f"({provider.judgments} judgments x ~{est.input_tokens_per_call} in / "
+                f"~{est.output_tokens_per_call} out tokens; --dry-run estimate: "
+                f"{est.total_calls} calls, ${est.estimated_usd:.4f})"
             )
     else:
         print(f"live model:          {provider.model}")

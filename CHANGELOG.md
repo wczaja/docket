@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`--batch N` now batches** (`run`, `serve`, `self-test`, and
+  `Classifier(batch_size=N)`); it was a no-op on real judge calls. Each
+  `llm_judge` mode judges up to N traces per provider call. A trace whose
+  batched verdict is unusable (the call failed, or its own entry failed
+  validation) is re-judged alone on the usual retry and backoff schedule,
+  and the valid verdicts from the same batch are kept. Judges inside
+  `composite` modes still run one trace per call. `classify_all` now
+  returns results in input order whatever order the work finishes in.
+- **The cost estimate no longer shrinks with `--batch`**: `--dry-run` and
+  the `max_estimated_cost_usd` gate priced a `--batch N` run at 1/N of
+  its cost. `total_calls` now counts exactly the calls the classifier
+  makes (a composite's judges run once per trace each), and tokens and
+  dollars are priced per trace judged: a batched call still carries every
+  trace's text and verdict, so batching cuts calls, not the estimate.
+- `scripts/benchmark_classify.py` crashed on a stale `estimate_cost`
+  call; it now also answers batched calls and reports trace judgments,
+  and `docs/benchmarks.md` is re-measured with it.
+
 ## [1.1.0] - 2026-07-04
 
 ### Added

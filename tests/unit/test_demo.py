@@ -334,6 +334,41 @@ def test_cli_run_dry_run_against_demo_backend(monkeypatch: pytest.MonkeyPatch) -
     assert "60" in result.output
 
 
+def test_cli_dry_run_batch_lowers_calls_not_cost(monkeypatch: pytest.MonkeyPatch) -> None:
+    for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    runner = CliRunner()
+    outputs = {}
+    for batch in ("1", "8"):
+        result = runner.invoke(
+            main,
+            [
+                "run",
+                "--backend",
+                "demo",
+                "--rubric",
+                "docket.dev/builtin/agents/v1",
+                "--since",
+                "1h",
+                "--dry-run",
+                "--batch",
+                batch,
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        outputs[batch] = result.output
+    # 60 traces; agents/v1 has two llm_judge modes plus a composite whose judge
+    # runs per trace: 3 x 60 unbatched, 2 x ceil(60 / 8) + 60 at batch 8.
+    assert "= 180 LLM calls" in outputs["1"]
+    assert "= 76 LLM calls" in outputs["8"]
+    assert "Batching cuts calls, not this estimate" in outputs["8"]
+
+    def _cost_line(output: str) -> str:
+        return next(line for line in output.splitlines() if line.startswith("Estimated cost"))
+
+    assert _cost_line(outputs["8"]) == _cost_line(outputs["1"])
+
+
 async def test_demo_pipeline_mode_only_clustering_needs_no_embeddings(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
