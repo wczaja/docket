@@ -68,9 +68,9 @@ wrapper around this). All parameters keyword-only:
 | `output_dir` | `Path \| None` | draft/report queue dir; default `~/.docket/queued-issues/` |
 | `tracker` | `Tracker \| None` | enables dedup + posting; `None` = queue locally |
 | `auto_post_threshold` | `"never"` | `critical\|high\|medium\|low\|never` |
-| `sample_count`, `sample_strategy`, `stratify_by` | `None`, `"uniform"`, `None` | run_id-seeded sampling (`uniform\|stratified\|errors-only`) |
+| `sample_count`, `sample_strategy` | `None`, `"uniform"` | run_id-seeded uniform sampling of `sample_count` traces. `sample_strategy` also accepts `"stratified"` and `"errors-only"`, but neither is implemented: both fall back to uniform with a warning (there is no `stratify_by` parameter) |
 | `checkpoint` | `bool = False` | sentinel-based resumability (needs write access) |
-| `max_traces_per_run` | `int \| None = 1000` | budget gate; `None` disables |
+| `max_traces` | `int \| None = None` | budget gate on the post-sample, post-checkpoint trace count; `None` (the default) disables it. The CLI always passes one: `--max-traces`, else config `max_traces_per_run`, else 1000 |
 | `max_estimated_cost_usd` | `float \| None = None` | dollar gate on the pre-flight estimate |
 
 Raises `BudgetExceededError` before any trace fetch if a gate trips;
@@ -111,25 +111,27 @@ from docket.adapters.tracker.jira import JiraAdapter
 from docket.adapters.tracker.linear import LinearAdapter
 from docket.adapters.tracker.github import GitHubAdapter
 
-PhoenixAdapter(base_url, api_key=None, max_list_pages=...)
-LangfuseAdapter(host, public_key=None, secret_key=None, max_list_pages=...)
-LangsmithAdapter(endpoint, api_key, project=None, max_list_pages=...)
+PhoenixAdapter(base_url, api_key=None)
+LangfuseAdapter(host, public_key=None, secret_key=None)
+LangsmithAdapter(endpoint=..., api_key=..., project=None)
 JiraAdapter(
-    host, project, email=None, api_token=None, pat=None, deployment=None, max_list_pages=...
+    host, project=..., email=None, api_token=None, pat=None, deployment=None
 )  # deployment: "cloud"|"datacenter"|None=auto
-LinearAdapter(team_id, api_key, endpoint=..., max_list_pages=...)
-GitHubAdapter(owner, repo, token, api_url=..., max_list_pages=...)
+LinearAdapter(team_id=..., api_key=..., endpoint=...)
+GitHubAdapter(owner=..., repo=..., token=..., api_url=...)
 ```
 
 Missing credentials raise `CredentialError` at construction. Every
 adapter retries 429/5xx with backoff and must be closed
-(`await adapter.close()`).
+(`await adapter.close()`). Listing page ceilings are fixed per adapter;
+a `max_list_pages` argument to configure them is planned (see
+[listing page ceilings](configuration.md#listing-page-ceilings)).
 
 ### `docket.adapters.base.TraceBackend` (ABC)
 
 ```python
 async def list_traces(since, until, filter=None) -> list[str]
-async def list_traces_v2(since, until, filter=None) -> TraceListing
+async def list_traces_v2(since, until, filter=None) -> TraceListing     # planned; not on the ABC yet
 async def get_trace(trace_id) -> OpenInferenceTrace
 async def annotate_trace(trace_id, annotation: Annotation) -> None      # upsert
 async def search_traces(query, k=10) -> list[str]                       # may be unsupported
@@ -138,10 +140,12 @@ async def list_processed_trace_ids(run_id, since, until) -> set[str]    # checkp
 async def close() -> None
 ```
 
-`filter`'s reserved key `status` (`"ok"`/`"error"`) must be pushed down
-to the backend query or the adapter raises. Subclass this to integrate a
-backend we don't ship — implementation requirements and the parity-test
-expectations are in [adapters.md](adapters.md).
+Every shipped adapter ignores `filter`. `docket.models.listing` reserves
+a `status` key (`"ok"`/`"error"`) for a planned `--strategy errors-only`
+push-down, but nothing sends it yet. Subclass this to integrate a
+backend we don't ship — implementation requirements (including the
+intended filter contract) and the parity-test expectations are in
+[adapters.md](adapters.md).
 
 ### `docket.adapters.base.Tracker` (ABC)
 
@@ -235,8 +239,8 @@ serialization.
 | `IssueDraft` | `cluster_id, mode_id, rubric_version, run_id, severity, representative_trace_id, member_trace_ids, title, body, labels` — body ends with the provenance comment |
 | `IssueProvenance` | parse/emit the `<!-- docket:provenance {...} -->` block (`parse_from_body`) |
 | `Issue`, `IssuePatch`, `IssueListing` | tracker-side shapes; `IssueListing.truncated` is the dedup-safety flag |
-| `TraceListing`, `TraceSummary`, `RESERVED_FILTER_KEYS` | listing-with-summaries + `truncated` flag |
-| `RunReport`, `ModeStats`, `TraceResult` | the structured run report behind `report_markdown`: window, counts, `traces_listed`, `listing_truncated`, per-mode positive/negative/error counts, `annotations_written` |
+| `TraceListing`, `TraceSummary`, `RESERVED_FILTER_KEYS` | listing-with-summaries + `truncated` flag, in `docket.models.listing`; defined for the planned `list_traces_v2`, so nothing returns them yet |
+| `RunReport`, `ModeStats`, `TraceResult` | the structured run report behind `report_markdown`: window, `trace_count`, per-mode positive/negative/error counts, `annotations_written`, fetch and tracker failures (`traces_listed` and `listing_truncated` are planned) |
 
 ## Cost estimation (`docket.cost`)
 

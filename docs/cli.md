@@ -155,12 +155,11 @@ docket run --backend phoenix --phoenix-url http://localhost:6006 \
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--max-traces 1..10000000` | config / `1000` | Hard cap on effective workload (post-sample, post-checkpoint). Exceeding it aborts **before any trace fetch** with `BudgetExceededError`; truncation is never silent |
-| `--sample N` | off | Classify only N traces sampled from the window, seeded by `run_id` (re-runs sample identically) |
-| `--strategy {uniform|stratified|errors-only}` | `uniform` | `errors-only` pushes a root-error filter down to the backend; `stratified` allocates equally across strata |
-| `--stratify-by {status|latency_bucket|tag:<key>}` | — | Required with `--strategy stratified`; an unusable key aborts loudly |
+| `--max-traces 1..10000000` | config / `1000` | Hard cap on effective workload (post-sample, post-checkpoint). Exceeding it aborts **before any trace fetch** with `BudgetExceededError`; truncation is never silent. Not applied under `--agent` yet |
+| `--sample N` | off | Classify only N traces sampled from the window, seeded by `run_id` (re-runs sample identically). With `--checkpoint`, a resumed run currently re-samples from the not-yet-processed traces |
+| `--strategy {uniform\|stratified\|errors-only}` | `uniform` | How `--sample` picks traces. Only `uniform` is implemented: `errors-only` and `stratified` are accepted but log a warning and fall back to uniform. No root-error filter is pushed down to the backend, and there is no `--stratify-by` option yet |
 | `--checkpoint/--no-checkpoint` | off | Write per-trace sentinels; on re-run with the same `run_id`, skip already-classified traces. Requires backend write access |
-| `--dry-run` | off | Same listing/filter/sample/checkpoint/budget computation as a real run, prints the cost estimate + both gate statuses, executes nothing. **Exit code is non-zero iff the real run would abort** — usable as a CI preflight gate |
+| `--dry-run` | off | Lists the window, applies `--sample`, prints the cost estimate, executes nothing. **Exits non-zero if the estimate exceeds `max_estimated_cost_usd`** — usable as a CI cost gate. It doesn't subtract `--checkpoint` progress or evaluate the trace cap (`--max-traces` / `max_traces_per_run`) yet, so a run it passes can still abort on that cap |
 
 ### Execution mode and observability
 
@@ -174,8 +173,8 @@ docket run --backend phoenix --phoenix-url http://localhost:6006 \
 
 | Code | Meaning |
 |---|---|
-| 0 | Run completed (or `--dry-run`: real run would proceed) |
-| 1 | Any `DocketError`: config/credential error, rubric validation failure, budget exceeded, backend write failure after retries — or `--dry-run` predicting an abort |
+| 0 | Run completed (or `--dry-run`: the estimate doesn't exceed `max_estimated_cost_usd`) |
+| 1 | Any `DocketError`: config/credential error, rubric validation failure, budget exceeded, backend write failure after retries — or `--dry-run` finding the estimate over `max_estimated_cost_usd` |
 | 2 | CLI usage error (bad flag value, malformed duration) |
 
 Per-trace fetch failures and per-trace classifier failures (after 3
@@ -250,13 +249,15 @@ purely by environment variables — see [mcp-servers.md](mcp-servers.md)
 for the tool contracts):
 
 ```
-docket-adapter-phoenix     PHOENIX_URL (required), PHOENIX_API_KEY, PHOENIX_MAX_LIST_PAGES
-docket-adapter-langfuse    LANGFUSE_HOST (required), LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_MAX_LIST_PAGES
-docket-adapter-langsmith   LANGSMITH_API_KEY (required), LANGSMITH_ENDPOINT, LANGSMITH_PROJECT, LANGSMITH_MAX_LIST_PAGES
-docket-adapter-jira        JIRA_HOST + JIRA_PROJECT (required), JIRA_EMAIL + JIRA_API_TOKEN or JIRA_PAT, JIRA_DEPLOYMENT, JIRA_MAX_LIST_PAGES
-docket-adapter-linear      LINEAR_API_KEY + LINEAR_TEAM_ID (required), LINEAR_ENDPOINT, LINEAR_MAX_LIST_PAGES
-docket-adapter-github      GITHUB_TOKEN + GITHUB_OWNER + GITHUB_REPO (required), GITHUB_API_URL, GITHUB_MAX_LIST_PAGES
+docket-adapter-phoenix     PHOENIX_URL (required), PHOENIX_API_KEY
+docket-adapter-langfuse    LANGFUSE_HOST (required), LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
+docket-adapter-langsmith   LANGSMITH_API_KEY (required), LANGSMITH_ENDPOINT, LANGSMITH_PROJECT
+docket-adapter-jira        JIRA_HOST + JIRA_PROJECT (required), JIRA_EMAIL + JIRA_API_TOKEN or JIRA_PAT, JIRA_DEPLOYMENT
+docket-adapter-linear      LINEAR_API_KEY + LINEAR_TEAM_ID (required), LINEAR_ENDPOINT
+docket-adapter-github      GITHUB_TOKEN + GITHUB_OWNER + GITHUB_REPO (required), GITHUB_API_URL
 ```
 
 A missing required variable exits with code 2 and the variable's name on
-stderr.
+stderr. Listing page ceilings are fixed per adapter; `<NAME>_MAX_LIST_PAGES`
+variables to configure them are planned (see
+[listing page ceilings](configuration.md#listing-page-ceilings)).

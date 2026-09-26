@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The docs no longer describe unbuilt listing, sampling, and budget
+  features as shipped.** Design Phase 11 (proposal 001) was documented
+  as complete, but several pieces were never implemented. The docs now
+  mark them as planned, describe what happens today, and link a
+  follow-up for each:
+  - There's no `TraceBackend.list_traces_v2`, `RunReport.traces_listed`
+    / `listing_truncated`, report truncation banner, or
+    `list_traces_v2` / `list_open_issues_v2` MCP tool
+    ([#15](https://github.com/wczaja/docket/issues/15)). At their page
+    ceiling, Langfuse and LangSmith listings stop at 5,000 traces
+    without a warning
+    ([#16](https://github.com/wczaja/docket/issues/16)), and Phoenix
+    fails the run.
+  - Page ceilings are fixed: the `max_list_pages` constructor argument
+    and the `*_MAX_LIST_PAGES` keys don't exist
+    ([#12](https://github.com/wczaja/docket/issues/12)).
+  - `--strategy errors-only` and `--strategy stratified` fall back to
+    uniform sampling with a warning; `--stratify-by` / `stratify_by`
+    don't exist, and the adapters ignore the `filter` argument of
+    `list_traces` ([#17](https://github.com/wczaja/docket/issues/17)).
+    With `--checkpoint`, a resumed `--sample` run samples the
+    unprocessed traces afresh instead of finishing the original sample
+    ([#14](https://github.com/wczaja/docket/issues/14)).
+  - `--dry-run` gates only on `max_estimated_cost_usd`, not on the
+    trace cap, and `--agent` runs aren't budget-gated
+    ([#13](https://github.com/wczaja/docket/issues/13)). The Python
+    API's trace cap is `max_traces` (default `None`), not
+    `max_traces_per_run`.
+  - `docket serve --help` no longer advertises backend error filtering
+    or `--stratify-by`.
+
 ## [1.1.0] - 2026-07-04
 
 ### Added
@@ -87,9 +122,10 @@ plus the budget-guardrail work originally scheduled for Phase 11.
   `multi-agent/v1`, all synthetic, plus the published example
   `rubrics/examples/sample-support-agent.yaml`.
 - **Three trace-backend adapters** — Phoenix, Langfuse, LangSmith — each
-  normalizing to OpenInference, with cursor pagination, loud listing
-  truncation, and retry-with-backoff. Each ships as an importable
-  adapter class and a standalone MCP server binary.
+  normalizing to OpenInference, with cursor pagination and
+  retry-with-backoff. Each ships as an importable adapter class and a
+  standalone MCP server binary. (This entry originally also claimed loud
+  listing truncation, which didn't ship; see the Unreleased section.)
 - **Three tracker adapters** — Jira (Cloud + Data Center), Linear,
   GitHub Issues — with label + HTML-comment provenance dedup, also
   exposed as MCP servers.
@@ -103,8 +139,10 @@ plus the budget-guardrail work originally scheduled for Phase 11.
   instead of dropping it.
 - **Budget guardrails**: `max_traces_per_run` hard cap,
   `max_estimated_cost_usd` dollar ceiling, `--dry-run` CI preflight
-  gate, `--sample` with uniform / errors-only / stratified strategies,
-  `--checkpoint` resumability via backend annotations.
+  gate, `--sample` with uniform sampling, `--checkpoint` resumability
+  via backend annotations. (This entry originally also listed the
+  `errors-only` and `stratified` strategies, which fall back to uniform;
+  see the Unreleased section.)
 - **Human-in-the-loop**: drafts queue locally by default; `--review`
   walks them through `$EDITOR`; `--auto-post-threshold` is explicit
   opt-in.
@@ -116,5 +154,6 @@ plus the budget-guardrail work originally scheduled for Phase 11.
 - Documentation set: quickstart, concepts, rubric DSL reference, adapter
   guide, per-backend/tracker setup guides, benchmarks, security policy.
 
+[Unreleased]: https://github.com/wczaja/docket/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/wczaja/docket/releases/tag/v1.1.0
 [1.0.0]: https://github.com/wczaja/docket/releases/tag/v1.0.0

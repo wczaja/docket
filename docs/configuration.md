@@ -51,14 +51,11 @@ instrumentation_backend: null     # MCP block for self-instrumentation (reserved
 |---|---|---|---|
 | phoenix | `PHOENIX_URL` | yes | e.g. `http://localhost:6006` |
 | | `PHOENIX_API_KEY` | no | for authenticated Phoenix deployments |
-| | `PHOENIX_MAX_LIST_PAGES` | no | pagination ceiling (positive int) |
 | langfuse | `LANGFUSE_HOST` | yes | cloud or self-hosted URL |
 | | `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` | for auth | key pair |
-| | `LANGFUSE_MAX_LIST_PAGES` | no | |
 | langsmith | `LANGSMITH_API_KEY` | yes | |
 | | `LANGSMITH_ENDPOINT` | no | default `https://api.smith.langchain.com` |
 | | `LANGSMITH_PROJECT` | no | project/session filter |
-| | `LANGSMITH_MAX_LIST_PAGES` | no | |
 
 ### Tracker `env` keys
 
@@ -68,20 +65,29 @@ instrumentation_backend: null     # MCP block for self-instrumentation (reserved
 | | `JIRA_EMAIL` + `JIRA_API_TOKEN` | Cloud auth | Basic auth pair |
 | | `JIRA_PAT` | Data Center auth | personal access token |
 | | `JIRA_DEPLOYMENT` | no | `cloud`/`datacenter`; default auto-detects from hostname |
-| | `JIRA_MAX_LIST_PAGES` | no | |
 | linear | `LINEAR_API_KEY` + `LINEAR_TEAM_ID` | yes | team **UUID**, not the key |
 | | `LINEAR_ENDPOINT` | no | default `https://api.linear.app/graphql` |
-| | `LINEAR_MAX_LIST_PAGES` | no | |
 | github | `GITHUB_TOKEN` + `GITHUB_OWNER` + `GITHUB_REPO` | yes | PAT needs Issues read/write |
 | | `GITHUB_API_URL` | no | set for GitHub Enterprise Server |
-| | `GITHUB_MAX_LIST_PAGES` | no | |
 
-`*_MAX_LIST_PAGES` semantics: when a listing hits the ceiling with a full
-last page, the adapter flags `truncated=True`, warns once, and the run
-report carries a truncation banner. During tracker dedup a truncated
-listing demotes would-be auto-posts to the local queue (a duplicate
-can't be ruled out). A malformed value is a `ConfigError`, never a
-silent fallback.
+### Listing page ceilings
+
+Every listing paginates up to a fixed page ceiling per adapter:
+
+| Adapter | Ceiling | When a listing reaches it |
+|---|---|---|
+| phoenix | 50 pages × 500 spans | the listing fails with `BackendError`, so the run aborts |
+| langfuse, langsmith | 50 pages × 100 traces | the listing stops at 5,000 traces **without a warning** |
+| jira, linear, github | 20 pages × 50 issues | the adapter warns and flags the listing as truncated; dedup then queues drafts that matched nothing instead of auto-posting them (a duplicate can't be ruled out) |
+
+The ceilings aren't configurable yet. Planned: a `max_list_pages`
+constructor argument on every adapter and a matching
+`<NAME>_MAX_LIST_PAGES` key (e.g. `LANGSMITH_MAX_LIST_PAGES`), where a
+malformed value is a `ConfigError`. Until then nothing reads such keys,
+whether they're set in an `env:` block or in the environment of an MCP
+binary. Also planned: trace listings that hit their ceiling get the
+tracker behavior (a `truncated` flag and one warning) plus a truncation
+banner in the run report.
 
 ## Process environment variables
 

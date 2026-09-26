@@ -73,14 +73,19 @@ once and the rest of the documentation reads cleanly.
   backfills.
 - **Budget gates** — `max_traces_per_run` (default 1000) and optional
   `max_estimated_cost_usd` abort a too-large run *before any trace is
-  fetched*; silent truncation is forbidden everywhere. `--dry-run`
-  evaluates both gates and prices the run without executing it;
-  `--sample N` (uniform / errors-only / stratified) bounds work on
-  windows too large to enumerate.
+  fetched*; the gates never truncate silently. They apply to the
+  deterministic pipeline; `--agent` runs aren't gated yet. `--dry-run`
+  prices the run without executing it and fails when the estimate
+  exceeds `max_estimated_cost_usd` (it doesn't evaluate the trace cap
+  yet); `--sample N` bounds work on windows too large to enumerate.
+  Sampling is uniform for now: the `errors-only` and `stratified`
+  strategies are planned and fall back to uniform with a warning.
 - **Report** — every run ends with a markdown report: per-mode
   frequencies, clusters formed, drafts created/posted/queued, skips and
-  errors, and a truncation banner if any backend listing hit its page
-  ceiling.
+  errors. A banner for a trace listing cut off at its page ceiling is
+  planned; today Langfuse and LangSmith listings stop at 5,000 traces
+  without any warning, and Phoenix fails the run instead (see
+  [listing page ceilings](configuration.md#listing-page-ceilings)).
 
 ## Where state lives
 

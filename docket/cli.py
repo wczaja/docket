@@ -1646,11 +1646,8 @@ _SHARED_PIPELINE_OPTIONS: list[Any] = [
         "sample_strategy",
         type=click.Choice(["uniform", "stratified", "errors-only"]),
         default="uniform",
-        help="Sampling strategy. uniform: seeded random over the listing. "
-        "errors-only: only traces whose root run/span ended in error (the "
-        "filter is pushed down to the backend listing). stratified: equal "
-        "allocation across the strata of --stratify-by, so rare strata "
-        "(errors, small tenants, tail latencies) get seen.",
+        help="Sampling strategy (v1.1 implements uniform; stratified and "
+        "errors-only fall back to uniform with a warning pending Phase 12).",
     ),
     click.option(
         "--max-traces",

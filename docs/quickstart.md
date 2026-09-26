@@ -283,7 +283,8 @@ hoc runs.
 ## Cost controls and sampling
 
 Classification issues one LLM call per `(trace, mode)` pair, so cost
-scales with the window. Two budget gates bound every run:
+scales with the window. Two budget gates bound every run of the
+deterministic pipeline (`--agent` runs aren't gated yet):
 
 - `max_traces_per_run` (default 1000, override per-run with
   `--max-traces`) caps the effective workload — measured after sampling
@@ -292,31 +293,42 @@ scales with the window. Two budget gates bound every run:
 - `max_estimated_cost_usd` (config, optional) aborts any run whose
   pre-flight cost estimate exceeds the ceiling.
 
-Preview a run and gate CI on it — `--dry-run` exits non-zero iff the
-real run would abort:
+Preview a run's cost and gate CI on it — `--dry-run` exits non-zero if
+the estimate exceeds `max_estimated_cost_usd`:
 
 ```bash
 docket run --config docket.yaml --since 24h --dry-run
 ```
+
+`--dry-run` doesn't evaluate `max_traces_per_run` or subtract
+`--checkpoint` progress yet, so a run it passes can still abort on the
+trace cap.
 
 For windows too large to enumerate, sample:
 
 ```bash
 # 100 seeded-random traces from the window
 docket run ... --sample 100
-
-# only traces whose root span errored (filter pushed down to the backend)
-docket run ... --sample 100 --strategy errors-only
-
-# equal allocation across tenants, so small tenants get seen
-docket run ... --sample 90 --strategy stratified --stratify-by tag:tenant_id
 ```
 
-Sampling is seeded by the `run_id`, so re-runs of the same window (and
-`--checkpoint` resumes) draw the same traces. If a backend stops
-paginating at its page ceiling, the listing is flagged as truncated in
-the logs and the run report rather than passing itself off as the whole
-window.
+Uniform is the only sampling strategy implemented so far. `--strategy
+errors-only` and `--strategy stratified` are accepted but fall back to
+uniform with a warning; pushing a root-error filter down to the backend
+and stratifying with `--stratify-by status|latency_bucket|tag:<key>`
+(equal allocation, so small tenants get seen) are planned.
+
+Sampling is seeded by the `run_id`, so re-running the same window draws
+the same traces. Combined with `--checkpoint`, though, a resumed run
+currently samples from the traces not yet processed, so it classifies
+up to N more instead of finishing the original sample (sampling before
+checkpoint subtraction is planned).
+
+Trace listings stop at a fixed page ceiling: Langfuse and LangSmith
+return at most 5,000 traces per window, without a warning, and Phoenix
+fails the run once a window holds more than 25,000 spans. Keep windows
+below those sizes; flagging a truncated listing in the logs and the run
+report is planned. See
+[listing page ceilings](configuration.md#listing-page-ceilings).
 
 ## What happens on re-run
 
@@ -338,8 +350,8 @@ Re-running the same window:
 - If the tracker's open-issue listing is truncated at its page ceiling
   (very large backlogs), drafts that would have auto-posted are queued
   as `needs_create` instead — "no duplicate found" wasn't proven — and
-  the report says so. Raise `GITHUB_/JIRA_/LINEAR_MAX_LIST_PAGES` in the
-  tracker's env block or prune old docket issues.
+  the report says so. The ceiling (1,000 open issues per dedup query)
+  isn't configurable yet, so close or prune old docket issues.
 
 This is what makes scheduled runs (`docket run --since 1h` every
 hour from cron) safe: each run only surfaces new failures.

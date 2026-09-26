@@ -54,12 +54,17 @@ List trace IDs in a time window. → `["trace-id", ...]`
 |---|---|---|---|
 | `since` | string (ISO 8601) | yes | inclusive lower bound |
 | `until` | string \| null | no | null = now |
-| `filter` | object \| null | no | reserved key `status` (`"ok"`/`"error"`, root run/span state) is honored or the call fails; other keys are backend-specific |
+| `filter` | object \| null | no | currently ignored by all three backends. Planned: reserved key `status` (`"ok"`/`"error"`, root run/span state) is honored or the call fails; other keys are backend-specific |
 
-### `list_traces_v2`
+Listings stop at a fixed page ceiling per backend and aren't flagged as
+truncated yet: see
+[listing page ceilings](configuration.md#listing-page-ceilings).
 
-Same window/filter args as `list_traces`; returns per-trace summaries
-plus the truncation contract:
+### `list_traces_v2` (planned)
+
+Not exposed yet. The planned tool takes the same window/filter args as
+`list_traces` and returns per-trace summaries plus the truncation
+contract:
 
 ```json
 {
@@ -70,8 +75,8 @@ plus the truncation contract:
 }
 ```
 
-`truncated: true` means the backend stopped paginating at its
-`*_MAX_LIST_PAGES` ceiling — treat the listing as a lower bound.
+`truncated: true` will mean the backend stopped paginating at its page
+ceiling — treat the listing as a lower bound.
 
 ### `get_trace`
 
@@ -105,15 +110,18 @@ Semantic search where the backend supports it; otherwise the call errors
 
 ## Tracker tools (identical across the three trackers)
 
-### `list_open_issues` / `list_open_issues_v2`
+### `list_open_issues`
 
 | Arg | Type | Required | Notes |
 |---|---|---|---|
 | `filter` | object \| null | no | must honor a `labels` array meaning *all* labels present — this is how dedup queries `["docket", "mode:<id>", "rubric:<name>@<version>"]` |
 
-`_v2` adds `{"issues": [...], "truncated": bool, "page_limit": int}` —
-when `truncated` is true, "no duplicate found" is unproven (the triage
-poster reacts by queueing instead of auto-posting).
+A `list_open_issues_v2` tool is planned: same args, returning
+`{"issues": [...], "truncated": bool, "page_limit": int}` — when
+`truncated` is true, "no duplicate found" is unproven (the triage
+poster reacts by queueing instead of auto-posting). Until it ships, a
+listing cut off at the tracker's page ceiling (1,000 open issues) looks
+complete over MCP.
 
 ### `search_issues`
 
@@ -144,7 +152,7 @@ Returns the created `Issue` (`id`, `key`, `url`, `title`, `body`,
 - The pipeline CLI does **not** spawn these binaries; it drives the same
   adapter classes in-process. The servers exist so *other* systems can
   compose with docket's contracts — e.g. a chat agent that calls
-  `list_traces_v2` + `get_trace` to investigate, then files follow-ups
+  `list_traces` + `get_trace` to investigate, then files follow-ups
   via `create_issue` with proper provenance so the nightly triage run
   dedups against them.
 - If you create issues through these tools yourself, reuse

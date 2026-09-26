@@ -112,7 +112,9 @@ Study `docket/adapters/trace/phoenix.py` and its tests as the
 reference implementation, and read `docs/adapters.md` for the full tool
 contract. New adapters need: unit tests with mocked transports at parity
 with the existing ones, retry-with-backoff on 429s, listing pagination
-with the loud-truncation contract (`TraceListing.truncated`), and a
+whose page ceiling raises or warns rather than silently returning a
+partial listing (the trace-side loud-truncation contract,
+`TraceListing.truncated`, is planned; see `docs/adapters.md`), and a
 `docs/local-<name>.md` setup guide.
 
 ## Pull request flow

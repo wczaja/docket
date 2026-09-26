@@ -31,7 +31,6 @@ case; the MCP servers exist for config-driven composition
 ```python
 class TraceBackend(ABC):
     async def list_traces(since, until, filter) -> list[trace_id]
-    async def list_traces_v2(since, until, filter) -> TraceListing   # summaries + truncated flag
     async def get_trace(trace_id) -> OpenInferenceTrace
     async def annotate_trace(trace_id, annotation) -> None
     async def search_traces(query, k) -> list[trace_id]              # stub where unsupported
@@ -46,19 +45,26 @@ Contract obligations, each pinned by the shared parity tests:
   `llm.input_messages.*`, `tool.name`, …). Lossless enough that the
   classifier input is identical across backends for the same underlying
   data.
-- **Loud truncation.** If listing stops at a page ceiling
-  (`<NAME>_MAX_LIST_PAGES`), return `TraceListing(truncated=True)` and
-  warn once — never pretend a partial listing is the window.
-- **Filter pushdown.** The listing `filter`'s reserved `status` key
-  (`{"status": "error"}` for `--strategy errors-only`) must be pushed to
-  the backend query, or the adapter must raise — not filter client-side
-  silently.
 - **Idempotent annotations.** Writing the same
   `(trace_id, run_id, rubric_version, mode_id)` twice upserts.
 - **Retry on 429/5xx** with backoff, honoring `Retry-After`.
 - **Typed errors.** Network/API failures raise `BackendError`; missing
   credentials raise `CredentialError` at construction, naming the env
   var.
+
+Planned additions to the contract (no shipped backend meets them yet):
+
+- **Loud truncation.** A `list_traces_v2(since, until, filter) ->
+  TraceListing` method returns per-trace summaries; if listing stops at
+  the page ceiling (configurable via `<NAME>_MAX_LIST_PAGES`), it returns
+  `TraceListing(truncated=True)` and warns once — never pretending a
+  partial listing is the window. Today Phoenix raises `BackendError` at
+  its ceiling, while Langfuse and LangSmith stop at 5,000 traces without
+  a warning.
+- **Filter pushdown.** The listing `filter`'s reserved `status` key
+  (`{"status": "error"}`, for `--strategy errors-only`) must be pushed to
+  the backend query, or the adapter must raise — not filter client-side
+  silently. Today all three adapters ignore `filter`.
 
 Shipped: **Phoenix** (GraphQL; OSS, the local-dev default), **Langfuse**
 (public API; cloud + self-hosted), **LangSmith** (REST; API key
@@ -107,9 +113,10 @@ merged:
 2. Implement the adapter class with `httpx.AsyncClient`, constructor
    taking explicit config + credentials (no env reads inside methods),
    `CredentialError` on missing credentials at construction.
-3. Pagination loop with a configurable page ceiling
-   (`<NAME>_MAX_LIST_PAGES`) and the `truncated` flag; retry helper with
-   backoff for 429/5xx.
+3. Pagination loop with a page ceiling that raises or warns rather than
+   silently returning a partial listing (a configurable ceiling via
+   `<NAME>_MAX_LIST_PAGES` and the trace-side `truncated` flag are
+   planned — see above); retry helper with backoff for 429/5xx.
 4. The MCP server wrapper in `docket/mcp_servers/adapter_<name>.py`
    (copy an existing one — they're ~30 lines over the shared `_common`
    helpers) and a `[project.scripts]` entry.

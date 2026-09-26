@@ -187,21 +187,27 @@ only when you pass `--annotate`. Issues post to the tracker only when
 their severity meets `auto_post_threshold` (default: `never`) or when
 you opt in via `--review`.
 
-**Bounded by default.** Every run is capped by `max_traces_per_run`
-(default 1000, measured after sampling and checkpoint subtraction);
-exceeding the cap aborts loudly before any trace is fetched, never a
-silent truncation. An optional `max_estimated_cost_usd` adds a dollar
-ceiling on the pre-flight cost estimate. `--dry-run` reports both gates
-and exits non-zero iff the real run would abort, so CI can use it as a
-preflight check. For production-scale windows, `--sample N` bounds the
-work with `--strategy uniform`, `--strategy errors-only` (root-errored
-traces, filter pushed down to the backend), or `--strategy stratified
---stratify-by status|latency_bucket|tag:<key>` (equal allocation so rare
-strata: errors, small tenants, tail latencies, get seen). Adapters
-flag truncated listings: trace and tracker alike, instead of silently
-stopping at their pagination ceiling; when the open-issue listing is
-truncated during dedup, drafts are queued for review instead of
-auto-posted, since "no duplicate found" was not proven.
+**Bounded by default.** Every run of the deterministic pipeline (the
+default mode; `--agent` runs aren't gated yet) is capped by
+`max_traces_per_run` (default 1000, measured after sampling and
+checkpoint subtraction); exceeding the cap aborts loudly before any
+trace is fetched, never a silent truncation. An optional
+`max_estimated_cost_usd` adds a dollar ceiling on the pre-flight cost
+estimate. `--dry-run` prints that estimate and exits non-zero when it
+exceeds the ceiling, so CI can use it as a cost preflight check (it
+doesn't evaluate the trace cap yet). For production-scale windows,
+`--sample N` bounds the work with a seeded uniform sample. `--strategy
+errors-only` and `--strategy stratified` are accepted but fall back to
+uniform with a warning: pushing a root-error filter down to the
+backend, and equal allocation across strata via `--stratify-by
+status|latency_bucket|tag:<key>` (so errors, small tenants, and tail
+latencies get seen), are planned. Tracker adapters flag an open-issue
+listing cut off at their pagination ceiling; when that happens during
+dedup, drafts are queued for review instead of auto-posted, since "no
+duplicate found" was not proven. Trace listings aren't flagged yet:
+Langfuse and LangSmith stop at 5,000 traces per window without a
+warning, and Phoenix fails the run past 25,000 spans (see
+[listing page ceilings](docs/configuration.md#listing-page-ceilings)).
 
 **State lives in the backends, not here.** docket doesn't own a
 database. Annotations key off `(trace_id, run_id, rubric_version,
