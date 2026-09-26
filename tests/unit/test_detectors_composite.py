@@ -6,7 +6,8 @@ from docket.detectors import get_detector
 from docket.detectors.composite import CompositeDetector
 from docket.errors import DetectionError
 from docket.llm.base import ModelProvider
-from docket.models.trace import TraceLike
+from docket.models.trace import ToolCall, TraceLike
+from docket.rubric.loader import load_rubric
 from docket.rubric.spec import Detection, Mode
 
 
@@ -206,3 +207,133 @@ async def test_composite_bad_operator_raises() -> None:
     detector = CompositeDetector(lambda t: get_detector(t))
     with pytest.raises(DetectionError, match="must be 'and' or 'or'"):
         await detector.evaluate(mode, TraceLike(full_text=""))
+
+
+# --- lifting the firing operands' confidence and evidence -----------------------
+
+
+class _ScriptedJudge(ModelProvider):
+    """Returns queued judge responses in call order (= operand evaluation order)."""
+
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.model = "mock:1"
+        self._responses = responses
+
+    async def structured_complete(
+        self, system: str, user: str, schema: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self._responses.pop(0)
+
+
+def _evidence_judge_operand() -> Detection:
+    return Detection(
+        type="llm_judge",
+        prompt="Did the handoff lose context?",
+        output_schema={
+            "type": "object",
+            "required": ["positive"],
+            "properties": {
+                "positive": {"type": "boolean"},
+                "missing_context": {"type": ["string", "null"]},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            },
+        },
+    )
+
+
+_HANDOFF_TRACE = TraceLike(
+    full_text="[tool:handoff] input: {}\n[assistant] I don't have the order ID for this refund."
+)
+
+
+async def test_composite_lifts_judge_confidence_and_evidence() -> None:
+    provider = _ScriptedJudge(
+        [{"positive": True, "missing_context": "the order ID", "confidence": 0.8}]
+    )
+    mode = _composite_mode(
+        "and", [Detection(type="regex", pattern="handoff"), _evidence_judge_operand()]
+    )
+    detector = CompositeDetector(lambda t: get_detector(t, llm_provider=provider))
+    verdict = await detector.evaluate(mode, _HANDOFF_TRACE)
+    assert verdict.positive
+    assert verdict.extra["confidence"] == 0.8
+    assert verdict.extra["excerpt"] == "the order ID"
+    assert verdict.extra["excerpt_verified"] is True
+    assert verdict.extra["match"] == "handoff"
+    # The per-operand record is unchanged.
+    assert [v["positive"] for v in verdict.extra["sub_verdicts"]] == [True, True]
+
+
+async def test_composite_negative_lifts_nothing() -> None:
+    provider = _ScriptedJudge([{"positive": False, "missing_context": None, "confidence": 0.9}])
+    mode = _composite_mode(
+        "and", [Detection(type="regex", pattern="handoff"), _evidence_judge_operand()]
+    )
+    detector = CompositeDetector(lambda t: get_detector(t, llm_provider=provider))
+    verdict = await detector.evaluate(mode, _HANDOFF_TRACE)
+    assert not verdict.positive
+    assert set(verdict.extra) == {"operator", "sub_verdicts"}
+
+
+async def test_composite_and_takes_lowest_confidence_and_first_evidence() -> None:
+    provider = _ScriptedJudge(
+        [
+            {"positive": True, "missing_context": "the order ID", "confidence": 0.9},
+            {"positive": True, "missing_context": "the refund amount", "confidence": 0.6},
+        ]
+    )
+    mode = _composite_mode("and", [_evidence_judge_operand(), _evidence_judge_operand()])
+    detector = CompositeDetector(lambda t: get_detector(t, llm_provider=provider))
+    verdict = await detector.evaluate(mode, _HANDOFF_TRACE)
+    assert verdict.extra["confidence"] == 0.6
+    assert verdict.extra["excerpt"] == "the order ID"
+
+
+async def test_composite_or_lifts_only_the_operand_that_fired() -> None:
+    """A negative operand's confidence and evidence describe a non-failure."""
+    provider = _ScriptedJudge(
+        [
+            {"positive": False, "missing_context": "nothing", "confidence": 0.99},
+            {"positive": True, "missing_context": "a hallucinated ID 4411", "confidence": 0.4},
+        ]
+    )
+    mode = _composite_mode("or", [_evidence_judge_operand(), _evidence_judge_operand()])
+    detector = CompositeDetector(lambda t: get_detector(t, llm_provider=provider))
+    verdict = await detector.evaluate(mode, _HANDOFF_TRACE)
+    assert verdict.extra["confidence"] == 0.4
+    assert verdict.extra["excerpt"] == "a hallucinated ID 4411"
+    assert verdict.extra["excerpt_verified"] is False
+
+
+async def test_composite_lifts_through_nested_composites() -> None:
+    provider = _ScriptedJudge(
+        [{"positive": True, "missing_context": "the order ID", "confidence": 0.7}]
+    )
+    nested = Detection(
+        type="composite",
+        operator="or",
+        operands=[Detection(type="regex", pattern="no-such-text"), _evidence_judge_operand()],
+    )
+    mode = _composite_mode("and", [Detection(type="regex", pattern="refund"), nested])
+    detector = CompositeDetector(lambda t: get_detector(t, llm_provider=provider))
+    verdict = await detector.evaluate(mode, _HANDOFF_TRACE)
+    assert verdict.extra["confidence"] == 0.7
+    assert verdict.extra["excerpt"] == "the order ID"
+    assert verdict.extra["match"] == "refund"
+
+
+async def test_builtin_bad_handoff_surfaces_missing_context() -> None:
+    """agents/v1 `bad-handoff` needs no edits: its judge's `missing_context`
+    reaches the top level as `excerpt`."""
+    mode = next(
+        m for m in load_rubric("docket.dev/builtin/agents/v1").modes if m.id == "bad-handoff"
+    )
+    provider = _ScriptedJudge(
+        [{"positive": True, "missing_context": "the order ID", "confidence": 0.75}]
+    )
+    detector = CompositeDetector(lambda t: get_detector(t, llm_provider=provider))
+    trace = _HANDOFF_TRACE.model_copy(update={"tool_calls": [ToolCall(name="delegate_to_agent")]})
+    verdict = await detector.evaluate(mode, trace)
+    assert verdict.positive
+    assert verdict.extra["excerpt"] == "the order ID"
+    assert verdict.extra["confidence"] == 0.75

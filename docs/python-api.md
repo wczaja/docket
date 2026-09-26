@@ -18,6 +18,7 @@ from docket.adapters.trace.phoenix import PhoenixAdapter
 from docket.agent.triage import run_triage_pipeline
 from docket.rubric.loader import load_rubric
 
+
 async def main() -> None:
     backend = PhoenixAdapter(base_url="http://localhost:6006")
     rubric = load_rubric("docket.dev/builtin/agents/v1")
@@ -35,6 +36,7 @@ async def main() -> None:
     print(result.report_markdown)
     for cluster in result.clusters:
         print(cluster.mode_id, cluster.stats.size, cluster.representative_trace_id)
+
 
 asyncio.run(main())
 ```
@@ -112,8 +114,9 @@ from docket.adapters.tracker.github import GitHubAdapter
 PhoenixAdapter(base_url, api_key=None, max_list_pages=...)
 LangfuseAdapter(host, public_key=None, secret_key=None, max_list_pages=...)
 LangsmithAdapter(endpoint, api_key, project=None, max_list_pages=...)
-JiraAdapter(host, project, email=None, api_token=None, pat=None,
-            deployment=None, max_list_pages=...)   # deployment: "cloud"|"datacenter"|None=auto
+JiraAdapter(
+    host, project, email=None, api_token=None, pat=None, deployment=None, max_list_pages=...
+)  # deployment: "cloud"|"datacenter"|None=auto
 LinearAdapter(team_id, api_key, endpoint=..., max_list_pages=...)
 GitHubAdapter(owner, repo, token, api_url=..., max_list_pages=...)
 ```
@@ -158,14 +161,18 @@ async def close() -> None
 
 ```python
 from docket.llm import (
-    build_provider, build_embedding_provider,
-    ModelProvider, AnthropicProvider, OpenAIProvider,
-    EmbeddingProvider, OpenAIEmbeddingProvider,
-    DEFAULT_PROVIDER_URI,    # "anthropic:claude-haiku-4-5-20251001"
-    DEFAULT_EMBEDDING_URI,   # "openai:text-embedding-3-small"
+    build_provider,
+    build_embedding_provider,
+    ModelProvider,
+    AnthropicProvider,
+    OpenAIProvider,
+    EmbeddingProvider,
+    OpenAIEmbeddingProvider,
+    DEFAULT_PROVIDER_URI,  # "anthropic:claude-haiku-4-5-20251001"
+    DEFAULT_EMBEDDING_URI,  # "openai:text-embedding-3-small"
 )
 
-provider = build_provider("anthropic:claude-sonnet-4-6")   # "provider:model" URI
+provider = build_provider("anthropic:claude-sonnet-4-6")  # "provider:model" URI
 embedder = build_embedding_provider(DEFAULT_EMBEDDING_URI)
 ```
 
@@ -188,8 +195,9 @@ from docket.agent.subagents.classifier import Classifier
 
 classifier = Classifier(provider, batch_size=1, concurrency=8)
 results = await classifier.classify_all(
-    [(trace_id, open_inference_trace), ...], rubric,
-)   # -> dict[trace_id, list[Classification]]
+    [(trace_id, open_inference_trace), ...],
+    rubric,
+)  # -> dict[trace_id, list[Classification]]
 ```
 
 Retries each (trace, mode) up to 3 times with backoff, then marks it
@@ -200,7 +208,7 @@ errored rather than raising.
 ## Rubrics
 
 ```python
-from docket.rubric.loader import load_rubric        # resolves + merges imports
+from docket.rubric.loader import load_rubric  # resolves + merges imports
 from docket.rubric.validator import validate_rubric_yaml
 from docket.rubric.spec import Rubric, Mode, Detection
 ```
@@ -223,7 +231,7 @@ serialization.
 | `from_otlp` / `to_otlp` | lossless OTLP JSON ↔ `OpenInferenceTrace` |
 | `Classification` | one detector × one trace: `trace_id, rubric_version, mode_id, positive, extra, duration_ms, error` (error set ⇒ positive False) |
 | `Annotation` | backend-bound classification: adds `run_id, severity, confidence, excerpt`; `idempotency_key()` = `trace_id\|run_id\|rubric_version\|mode_id` |
-| `Cluster`, `ClusterStats` | `cluster_id, mode_id, severity, member_trace_ids, representative_trace_id, representative_excerpt, stats(size, min/max/mean confidence)`; `compute_cluster_id()` is deterministic |
+| `Cluster`, `ClusterStats` | `cluster_id, mode_id, severity, member_trace_ids, representative_trace_id, representative_excerpt, representative_excerpt_verified, stats(size, min/max/mean confidence)`; `representative_excerpt_verified` is `False` when the judge's excerpt isn't in the trace, `None` when there was no judge excerpt to check; `compute_cluster_id()` is deterministic |
 | `IssueDraft` | `cluster_id, mode_id, rubric_version, run_id, severity, representative_trace_id, member_trace_ids, title, body, labels` — body ends with the provenance comment |
 | `IssueProvenance` | parse/emit the `<!-- docket:provenance {...} -->` block (`parse_from_body`) |
 | `Issue`, `IssuePatch`, `IssueListing` | tracker-side shapes; `IssueListing.truncated` is the dedup-safety flag |

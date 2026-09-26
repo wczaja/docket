@@ -4,6 +4,39 @@ All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Judge evidence reaches clustering, annotations, and drafts for every
+  `llm_judge` mode**, not just the three whose `output_schema` names it
+  `excerpt`. Clustering and annotations read only `excerpt`/`match`, so
+  the other 40 shipped judge modes (`ungrounded_excerpt`,
+  `repeated_step`, `caller_language`, ...) clustered on the trace's final
+  response and wrote Phoenix/LangSmith/Langfuse annotations with no
+  explanation or comment. `LLMJudgeDetector` now copies a positive
+  verdict's evidence into the canonical `excerpt`: the judge's `excerpt`
+  if it returned one, else the first non-empty string among the
+  properties the schema declares, in declaration order. Existing rubrics
+  need no edits, and the DSL is unchanged.
+- **Composite detections surface their firing operands' `confidence`,
+  `excerpt`, and `match`** at the top level of the verdict (previously
+  only under `sub_verdicts`), so a composite judge's confidence reaches
+  cluster stats and representative selection, and its evidence reaches
+  annotations and drafts (e.g. `agents/v1` `bad-handoff`'s
+  `missing_context`). Confidence is the lowest among the operands that
+  fired.
+
+### Added
+
+- **`excerpt_verified`**: each judge excerpt is checked against the
+  redacted trace text the judge saw (ignoring case, whitespace, and quote
+  style; `...` elisions allowed). An excerpt that isn't found verbatim is
+  kept and flagged, never dropped: annotations carry the flag in their
+  metadata, `Cluster.representative_excerpt_verified` records it for the
+  representative, `report.md` marks the evidence as judge-reported, and
+  the drafter is told not to present it as a quote.
+
 ## [1.1.0] - 2026-07-04
 
 ### Added

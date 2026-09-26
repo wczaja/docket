@@ -78,10 +78,32 @@ The `output_schema` is passed to the provider's native structured-output
 mechanism without translation, so anything the provider's JSON Schema
 dialect supports is usable. Beyond `positive` (the verdict) the schema is
 yours; `confidence` (0–1) feeds cluster-representative selection and
-evidence fields (e.g. `excerpt`) feed clustering embeddings and issue
-drafts. The default judge model is the run's `--provider`/`--model`
-(fast-and-cheap by default); reserve per-mode `model:` overrides for
-modes that genuinely need a reasoning model.
+cluster confidence stats, and the evidence field feeds clustering
+embeddings, annotations, and issue drafts (see below). The default judge
+model is the run's `--provider`/`--model` (fast-and-cheap by default);
+reserve per-mode `model:` overrides for modes that genuinely need a
+reasoning model.
+
+**Evidence.** Name the evidence property whatever suits the mode
+(`ungrounded_excerpt`, `repeated_step`, `caller_language`, ...). For a
+positive verdict docket copies it into the classification's canonical
+`excerpt`, which is what clustering embeds, what annotations carry as
+their explanation/comment, and what drafts quote. The evidence is the
+judge's `excerpt` if it returned one; otherwise the first non-empty
+string among the other properties the schema declares, in declaration
+order (`positive` and `confidence` are skipped). So name it `excerpt`, or
+declare it first. Non-string properties (such as an integer
+`staleness_days`) are never evidence; a positive without string evidence
+clusters on the trace's final response instead.
+
+docket then checks that the excerpt occurs in the trace text the judge
+saw, after the same PII redaction, ignoring case, whitespace, and quote
+style, and allowing `...` elisions. It records the result as
+`excerpt_verified: true|false`. An excerpt that isn't found verbatim (a
+paraphrase, a label, or an invented quote) is kept and flagged, never
+dropped: annotations carry the flag in their metadata, `report.md` marks
+the evidence as judge-reported, and the drafter is told not to present it
+as a quote from the trace.
 
 ### `regex`
 
@@ -151,6 +173,15 @@ detection:
           positive: {type: boolean}
 ```
 
+A positive composite surfaces the `confidence`, `excerpt` (with its
+`excerpt_verified` flag), and regex `match` of the operands that fired at
+the top level of its result, so clustering and annotations treat it like
+any other detection. `confidence` is the lowest one those operands report
+(an `and` is no more certain than its least certain operand; an `or`
+fires on a single operand). `excerpt` and `match` come from the first
+firing operand that has one, with deterministic operands evaluated
+first. Each operand's own verdict stays under `sub_verdicts`.
+
 ## Examples
 
 Examples make a mode self-testing: `docket self-test` runs each
@@ -215,9 +246,11 @@ clustering:
   min_cluster_size: 3             # >= 2; clusters smaller than this don't draft issues
 ```
 
-Evidence excerpts from each positive classification are embedded and
-HDBSCAN-clustered per mode; each cluster's highest-confidence trace
-becomes the representative quoted in the draft.
+Each positive classification's evidence (a judge's `excerpt`, see
+**Evidence** under `llm_judge`; a regex `match`; failing both, the
+trace's final response) is embedded and HDBSCAN-clustered per mode; each
+cluster's highest-confidence trace becomes the representative quoted in
+the draft.
 
 ## Triage behavior
 

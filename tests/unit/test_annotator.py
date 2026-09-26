@@ -1,11 +1,17 @@
 """Tests for the Annotator subagent: positive-only writeback + retry + per-write abort."""
 
+from typing import Any
+
 import pytest
 
 from docket.adapters.base import TraceBackend
 from docket.agent.subagents.annotator import Annotator
+from docket.agent.subagents.classifier import Classifier
 from docket.errors import BackendError
+from docket.llm.base import ModelProvider
 from docket.models.classification import Annotation, Classification
+from docket.models.trace import OpenInferenceTrace, Span
+from docket.rubric.loader import load_rubric
 from docket.rubric.spec import Detection, Mode, Rubric, RubricMetadata
 
 
@@ -128,3 +134,87 @@ def test_annotator_rejects_zero_retries() -> None:
     backend = _FakeBackend()
     with pytest.raises(ValueError, match="max_retries"):
         Annotator(backend, run_id="r-1", max_retries=0)
+
+
+# --- evidence from real judge detectors -----------------------------------------
+
+
+class _ScriptedJudge(ModelProvider):
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.model = "mock:1"
+        self._responses = responses
+
+    async def structured_complete(
+        self, system: str, user: str, schema: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self._responses.pop(0)
+
+
+def _trace(answer: str, *, tool: str | None = None) -> OpenInferenceTrace:
+    llm = Span(
+        span_id="s-llm",
+        trace_id="t-1",
+        name="llm",
+        start_time_unix_nano=0,
+        end_time_unix_nano=2,
+        attributes={
+            "openinference.span.kind": "LLM",
+            "llm.output_messages.0.message.role": "assistant",
+            "llm.output_messages.0.message.content": answer,
+        },
+    )
+    spans = [llm]
+    if tool is not None:
+        spans.append(
+            Span(
+                span_id="s-tool",
+                trace_id="t-1",
+                name=tool,
+                start_time_unix_nano=0,
+                end_time_unix_nano=1,
+                attributes={"openinference.span.kind": "TOOL", "tool.name": tool},
+            )
+        )
+    return OpenInferenceTrace(trace_id="t-1", spans=spans)
+
+
+def _builtin_mode_rubric(uri: str, mode_id: str) -> Rubric:
+    rubric = load_rubric(uri)
+    return rubric.model_copy(update={"modes": [m for m in rubric.modes if m.id == mode_id]})
+
+
+async def test_annotation_carries_judge_evidence_property() -> None:
+    """rag/v1 `off-corpus-answer` names its evidence `ungrounded_excerpt`; the
+    annotation's excerpt (Phoenix explanation, LangSmith/Langfuse comment)
+    carries it."""
+    rubric = _builtin_mode_rubric("docket.dev/builtin/rag/v1", "off-corpus-answer")
+    judge = _ScriptedJudge(
+        [{"positive": True, "ungrounded_excerpt": "Feature X was added in v2.1", "confidence": 0.9}]
+    )
+    trace = _trace("Good question! Feature X was added in v2.1, per my notes.")
+    classifications = await Classifier(judge).classify_trace("t-1", trace, rubric)
+    backend = _FakeBackend()
+
+    written = await Annotator(backend, run_id="r-1").annotate_positive(classifications, rubric)
+
+    assert written == 1
+    annotation = backend.annotations[0]
+    assert annotation.excerpt == "Feature X was added in v2.1"
+    assert annotation.confidence == 0.9
+    assert annotation.notes["ungrounded_excerpt"] == "Feature X was added in v2.1"
+    assert annotation.notes["excerpt_verified"] is True
+
+
+async def test_annotation_carries_composite_judge_evidence() -> None:
+    """agents/v1 `bad-handoff` is tool_call AND llm_judge; the judge's
+    `missing_context` reaches the annotation through the composite."""
+    rubric = _builtin_mode_rubric("docket.dev/builtin/agents/v1", "bad-handoff")
+    judge = _ScriptedJudge([{"positive": True, "missing_context": "the order ID"}])
+    trace = _trace("I can't process this refund without the order ID.", tool="delegate_to_agent")
+    classifications = await Classifier(judge).classify_trace("t-1", trace, rubric)
+    backend = _FakeBackend()
+
+    await Annotator(backend, run_id="r-1").annotate_positive(classifications, rubric)
+
+    assert [a.excerpt for a in backend.annotations] == ["the order ID"]
+    assert backend.annotations[0].notes["excerpt_verified"] is True

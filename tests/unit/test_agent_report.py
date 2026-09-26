@@ -231,3 +231,27 @@ def test_render_report_includes_error_inventory() -> None:
     assert "## Detector errors" in md
     assert "`t-fail`" in md
     assert "hallucination" in md
+
+
+def test_render_report_marks_evidence_not_found_verbatim_in_trace() -> None:
+    def _cluster(cluster_id: str, verified: bool | None) -> Cluster:
+        return Cluster(
+            cluster_id=cluster_id,
+            mode_id="off-corpus-answer",
+            severity="critical",
+            member_trace_ids=["t-1", "t-2", "t-3"],
+            representative_trace_id="t-1",
+            representative_excerpt="Feature X was added in v2.1",
+            representative_excerpt_verified=verified,
+            stats=ClusterStats(size=3),
+        )
+
+    md = render_report(
+        run_report=_run_report(),
+        clusters=[_cluster("c-unverified", False), _cluster("c-verified", True)],
+        drafts=[],
+    )
+    caveat = "_(judge-reported; not found verbatim in the trace)_"
+    assert f"- **Representative evidence** {caveat}: Feature X was added in v2.1" in md
+    assert "- **Representative evidence**: Feature X was added in v2.1" in md
+    assert md.count(caveat) == 1

@@ -5,14 +5,18 @@ test. Real OpenAI embeddings get exercised in the gated integration test.
 """
 
 import logging
+from typing import Any
 
 import pytest
 
 from docket.agent.subagents import clusterer as clusterer_mod
+from docket.agent.subagents.classifier import Classifier
 from docket.agent.subagents.clusterer import cluster_per_mode
+from docket.llm.base import ModelProvider
 from docket.llm.embeddings import EmbeddingProvider
 from docket.models.classification import Classification
 from docket.models.trace import OpenInferenceTrace, Span
+from docket.rubric.loader import load_rubric
 from docket.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
 
 
@@ -475,3 +479,170 @@ def test_mode_only_redacts_excerpts() -> None:
     ]
     clusters = clusterer_mod.cluster_mode_only(classifications, rubric=rubric)
     assert "user@example.com" not in clusters[0].representative_excerpt
+
+
+# --- evidence from real detectors (judge property names, composites) -----------
+
+
+class _ScriptedJudge(ModelProvider):
+    """Returns queued judge responses in call order."""
+
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.model = "mock:1"
+        self._responses = responses
+
+    async def structured_complete(
+        self, system: str, user: str, schema: dict[str, Any]
+    ) -> dict[str, Any]:
+        return self._responses.pop(0)
+
+
+def _agent_trace(trace_id: str, answer: str, *, tool: str | None = None) -> OpenInferenceTrace:
+    spans = [
+        Span(
+            span_id=f"llm-{trace_id}",
+            trace_id=trace_id,
+            name="llm",
+            start_time_unix_nano=0,
+            end_time_unix_nano=2,
+            attributes={
+                "openinference.span.kind": "LLM",
+                "llm.input_messages.0.message.role": "user",
+                "llm.input_messages.0.message.content": "Which version added the feature?",
+                "llm.output_messages.0.message.role": "assistant",
+                "llm.output_messages.0.message.content": answer,
+            },
+        )
+    ]
+    if tool is not None:
+        spans.append(
+            Span(
+                span_id=f"tool-{trace_id}",
+                trace_id=trace_id,
+                name=tool,
+                start_time_unix_nano=0,
+                end_time_unix_nano=1,
+                attributes={"openinference.span.kind": "TOOL", "tool.name": tool},
+            )
+        )
+    return OpenInferenceTrace(trace_id=trace_id, spans=spans)
+
+
+async def _classify(
+    traces: dict[str, OpenInferenceTrace], rubric: Rubric, judge: ModelProvider
+) -> list[Classification]:
+    classifier = Classifier(judge)
+    out: list[Classification] = []
+    for trace_id, trace in traces.items():  # sequential: the judge's queue is ordered
+        out.extend(await classifier.classify_trace(trace_id, trace, rubric))
+    return out
+
+
+async def test_judge_evidence_property_is_embedded_instead_of_final_response() -> None:
+    """rag/v1 `off-corpus-answer` names its evidence `ungrounded_excerpt`, not
+    `excerpt`. That text is what gets embedded and becomes the
+    representative, not the trace's final response."""
+    rag = load_rubric("docket.dev/builtin/rag/v1")
+    rubric = _rubric([m for m in rag.modes if m.id == "off-corpus-answer"], min_cluster_size=3)
+    claims = [f"Feature {name} was added in v2.{i}" for i, name in enumerate("ABC")]
+    traces = {
+        f"t-{i}": _agent_trace(f"t-{i}", f"Good question! {claim}, per my notes.")
+        for i, claim in enumerate(claims)
+    }
+    judge = _ScriptedJudge(
+        [{"positive": True, "ungrounded_excerpt": claim, "confidence": 0.9} for claim in claims]
+    )
+    classifications = await _classify(traces, rubric, judge)
+    provider = _MockEmbeddingProvider({claim: [1.0, 0.0] for claim in claims})
+
+    clusters = await cluster_per_mode(
+        classifications, rubric=rubric, embedding_provider=provider, traces_by_id=traces
+    )
+
+    assert provider.calls == [claims]
+    assert len(clusters) == 1
+    assert clusters[0].representative_excerpt in claims
+    assert clusters[0].representative_excerpt_verified is True
+
+
+async def test_composite_judge_confidence_reaches_cluster_stats() -> None:
+    judge_operand = Detection(
+        type="llm_judge",
+        prompt="Did the receiving agent lack context?",
+        output_schema={
+            "type": "object",
+            "required": ["positive", "confidence"],
+            "properties": {
+                "positive": {"type": "boolean"},
+                "missing_context": {"type": ["string", "null"]},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            },
+        },
+    )
+    mode = Mode(
+        id="bad-handoff",
+        severity="high",
+        detection=Detection(
+            type="composite",
+            operator="and",
+            operands=[Detection(type="tool_call", tool_calls=["delegate_to_agent"]), judge_operand],
+        ),
+    )
+    rubric = _rubric([mode], min_cluster_size=3)
+    traces = {
+        f"t-{i}": _agent_trace(f"t-{i}", "I need the order ID first.", tool="delegate_to_agent")
+        for i in range(3)
+    }
+    confidences = [0.55, 0.95, 0.7]
+    judge = _ScriptedJudge(
+        [
+            {"positive": True, "missing_context": "the order ID", "confidence": c}
+            for c in confidences
+        ]
+    )
+    classifications = await _classify(traces, rubric, judge)
+    provider = _MockEmbeddingProvider({"the order ID": [1.0, 0.0]})
+
+    clusters = await cluster_per_mode(
+        classifications, rubric=rubric, embedding_provider=provider, traces_by_id=traces
+    )
+
+    assert len(clusters) == 1
+    stats = clusters[0].stats
+    assert stats.min_confidence == 0.55
+    assert stats.max_confidence == 0.95
+    assert stats.mean_confidence == pytest.approx(sum(confidences) / 3)
+    assert clusters[0].representative_trace_id == "t-1"  # the 0.95 member
+    assert clusters[0].representative_excerpt == "the order ID"
+    assert provider.calls == [["the order ID"] * 3]
+
+
+@pytest.mark.parametrize(
+    ("extra", "verified"),
+    [
+        ({"excerpt": "quoted", "excerpt_verified": True}, True),
+        ({"excerpt": "quoted", "excerpt_verified": False}, False),
+        # Evidence from a regex match comes from the trace: nothing to check.
+        ({"match": "quoted"}, None),
+        # A blank excerpt isn't what gets embedded, so its flag doesn't apply.
+        ({"excerpt": " ", "excerpt_verified": False, "match": "quoted"}, None),
+    ],
+)
+def test_representative_excerpt_verified_describes_the_representative_text(
+    extra: dict[str, Any], verified: bool | None
+) -> None:
+    mode = Mode(id="leak", severity="medium", detection=Detection(type="regex", pattern="x"))
+    rubric = _rubric([mode], min_cluster_size=2)
+    classifications = [
+        Classification(
+            trace_id=f"t-{i}",
+            rubric_version="cluster-test@0.0.1",
+            mode_id="leak",
+            positive=True,
+            extra=extra,
+        )
+        for i in range(2)
+    ]
+    clusters = clusterer_mod.cluster_mode_only(classifications, rubric=rubric)
+    assert clusters[0].representative_excerpt == "quoted"
+    assert clusters[0].representative_excerpt_verified is verified

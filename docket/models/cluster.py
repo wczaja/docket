@@ -25,7 +25,13 @@ class ClusterStats(BaseModel):
 
 
 class Cluster(BaseModel):
-    """A group of semantically-similar classified-positive traces for one mode."""
+    """A group of semantically-similar classified-positive traces for one mode.
+
+    `representative_excerpt_verified` is the representative's judge-excerpt
+    check: False means the judge's excerpt was not found verbatim in the
+    trace; None means the excerpt is not a judge excerpt (a regex match or
+    the final-response fallback), so there was nothing to check.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -35,6 +41,7 @@ class Cluster(BaseModel):
     member_trace_ids: list[str]
     representative_trace_id: str
     representative_excerpt: str | None = None
+    representative_excerpt_verified: bool | None = None
     stats: ClusterStats = Field(default_factory=lambda: ClusterStats(size=0))
 
 
