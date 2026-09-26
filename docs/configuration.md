@@ -88,7 +88,8 @@ silent fallback.
 | Variable | Read by | When needed |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Anthropic SDK | `--provider anthropic` (default) with any `llm_judge` mode, and `self-test` |
-| `OPENAI_API_KEY` | OpenAI SDK | `--provider openai`, **and always for clustering** — embeddings are OpenAI-only in v1, and the pipeline preflights this key before classifying so it fails fast rather than after spend |
+| `OPENAI_API_KEY` | OpenAI SDK | `--provider openai`, **and for embedding clustering with the default `--embedding openai:text-embedding-3-small`** (or any `openai:` model). Not needed with `--embedding voyage:…` (see below), `--embedding local:…` (no key; `pip install "docket-runtime[local-embeddings]"`), or `--clustering mode-only` (no embeddings). The pipeline preflights the embedding provider before classifying, so a missing key fails fast rather than after spend |
+| `VOYAGE_API_KEY` | Voyage embedding provider | `--embedding voyage:<model>` (e.g. `voyage:voyage-3.5-lite`) |
 | `EDITOR` | `--review` flow | optional; without it, drafts print to stdout with a y/n prompt |
 | Adapter variables (`PHOENIX_URL`, `GITHUB_TOKEN`, …) | **standalone MCP binaries only** | when running `docket-adapter-*` directly; the `run`/`serve` CLI takes these from flags or the config `env:` blocks instead |
 
@@ -98,7 +99,7 @@ silent fallback.
 |---|---|---|
 | Judge model (anthropic) | `claude-haiku-4-5-20251001` | `docket.llm.DEFAULT_ANTHROPIC_MODEL` |
 | Judge model (openai) | `gpt-4o-mini` | `docket.llm.DEFAULT_OPENAI_MODEL` |
-| Embedding model | `text-embedding-3-small` | `docket.llm.DEFAULT_OPENAI_EMBEDDING_MODEL` (rubrics can override via `clustering.embedding_model`) |
+| Embedding provider | `openai:text-embedding-3-small` | `docket.llm.DEFAULT_EMBEDDING_URI`; override with `--embedding provider:model` (`openai`, `voyage`, `local`). A rubric's `clustering.embedding_model` is validated but not read, so it can't change the model |
 | Classification concurrency | 8 | `--concurrency` |
 | Classifier retries | 3, exponential backoff | then the trace is marked unprocessed, run continues |
 | Backend write retries | 5 | then the run aborts (no partial-write runs) |

@@ -210,7 +210,7 @@ How positive classifications group into issues, per mode:
 ```yaml
 clustering:
   strategy: per_mode_embedding    # only strategy in v1
-  embedding_model: text-embedding-3-small
+  embedding_model: text-embedding-3-small   # accepted but not read yet; see below
   similarity_threshold: 0.82      # 0..1
   min_cluster_size: 3             # >= 2; clusters smaller than this don't draft issues
 ```
@@ -218,6 +218,12 @@ clustering:
 Evidence excerpts from each positive classification are embedded and
 HDBSCAN-clustered per mode; each cluster's highest-confidence trace
 becomes the representative quoted in the draft.
+
+`embedding_model` is validated but not yet read by the runtime: the
+embedding provider and model come from the run (`--embedding
+provider:model` on the CLI, default `openai:text-embedding-3-small`;
+`embedding_provider=` in the Python API), whatever the rubric sets
+here. `similarity_threshold` and `min_cluster_size` are honored.
 
 ## Triage behavior
 

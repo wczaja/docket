@@ -160,17 +160,23 @@ async def run_benchmark(args: argparse.Namespace) -> None:
         if provider._latency_s:  # noqa: SLF001 - benchmark introspection
             print(f"simulated latency:   {args.simulate_latency_ms}ms/call")
         for model in args.cost_models:
-            est = estimate_cost(trace_count=provider.calls, mode_count=1, model=model)
+            # The same estimate `docket run --dry-run` prints for this run.
+            est = estimate_cost(
+                trace_count=len(traces),
+                rubric=rubric,
+                model=model,
+                batch_size=args.batch,
+            )
             print(
                 f"projected cost:      ${est.estimated_usd:.4f} on {model} "
-                f"({provider.calls} calls x ~{est.input_tokens_per_call} in / "
+                f"({est.total_calls} calls x ~{est.input_tokens_per_call} in / "
                 f"~{est.output_tokens_per_call} out tokens)"
             )
     else:
         print(f"live model:          {provider.model}")
 
 
-def main() -> None:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--traces", type=int, default=1000)
     parser.add_argument("--concurrency", type=int, default=8)
@@ -194,7 +200,11 @@ def main() -> None:
         choices=known_models(),
         help="Models to project costs for in stub mode.",
     )
-    asyncio.run(run_benchmark(parser.parse_args()))
+    return parser
+
+
+def main() -> None:
+    asyncio.run(run_benchmark(build_arg_parser().parse_args()))
 
 
 if __name__ == "__main__":

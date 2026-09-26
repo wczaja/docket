@@ -75,8 +75,9 @@ once and the rest of the documentation reads cleanly.
   `max_estimated_cost_usd` abort a too-large run *before any trace is
   fetched*; silent truncation is forbidden everywhere. `--dry-run`
   evaluates both gates and prices the run without executing it;
-  `--sample N` (uniform / errors-only / stratified) bounds work on
-  windows too large to enumerate.
+  `--sample N` bounds work on windows too large to enumerate with a
+  seeded uniform sample (the `errors-only` and `stratified` strategies
+  are not implemented yet and fall back to uniform).
 - **Report** — every run ends with a markdown report: per-mode
   frequencies, clusters formed, drafts created/posted/queued, skips and
   errors, and a truncation banner if any backend listing hit its page

@@ -194,10 +194,11 @@ silent truncation. An optional `max_estimated_cost_usd` adds a dollar
 ceiling on the pre-flight cost estimate. `--dry-run` reports both gates
 and exits non-zero iff the real run would abort, so CI can use it as a
 preflight check. For production-scale windows, `--sample N` bounds the
-work with `--strategy uniform`, `--strategy errors-only` (root-errored
-traces, filter pushed down to the backend), or `--strategy stratified
---stratify-by status|latency_bucket|tag:<key>` (equal allocation so rare
-strata: errors, small tenants, tail latencies, get seen). Adapters
+work to a uniform random sample seeded by the `run_id`. `--strategy
+errors-only` and `--strategy stratified` are accepted but not yet
+implemented: both log a warning and fall back to uniform (no root-error
+filter is pushed down to the backend, and there is no `--stratify-by`
+option). Adapters
 flag truncated listings: trace and tracker alike, instead of silently
 stopping at their pagination ceiling; when the open-issue listing is
 truncated during dedup, drafts are queued for review instead of

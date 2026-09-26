@@ -31,7 +31,7 @@ jobs:
       - name: Run triage
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # embeddings (or use --embedding-provider voyage)
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}   # embeddings (or VOYAGE_API_KEY + --embedding voyage:voyage-3.5-lite)
           GITHUB_TOKEN: ${{ secrets.TRIAGE_GITHUB_TOKEN }} # PAT with Issues write on the target repo
         run: |
           docket run \

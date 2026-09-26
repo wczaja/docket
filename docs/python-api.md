@@ -18,6 +18,7 @@ from docket.adapters.trace.phoenix import PhoenixAdapter
 from docket.agent.triage import run_triage_pipeline
 from docket.rubric.loader import load_rubric
 
+
 async def main() -> None:
     backend = PhoenixAdapter(base_url="http://localhost:6006")
     rubric = load_rubric("docket.dev/builtin/agents/v1")
@@ -35,6 +36,7 @@ async def main() -> None:
     print(result.report_markdown)
     for cluster in result.clusters:
         print(cluster.mode_id, cluster.stats.size, cluster.representative_trace_id)
+
 
 asyncio.run(main())
 ```
@@ -66,9 +68,9 @@ wrapper around this). All parameters keyword-only:
 | `output_dir` | `Path \| None` | draft/report queue dir; default `~/.docket/queued-issues/` |
 | `tracker` | `Tracker \| None` | enables dedup + posting; `None` = queue locally |
 | `auto_post_threshold` | `"never"` | `critical\|high\|medium\|low\|never` |
-| `sample_count`, `sample_strategy`, `stratify_by` | `None`, `"uniform"`, `None` | run_id-seeded sampling (`uniform\|stratified\|errors-only`) |
+| `sample_count`, `sample_strategy` | `None`, `"uniform"` | run_id-seeded uniform sampling of `sample_count` traces. `sample_strategy` also accepts `"stratified"` and `"errors-only"`, but neither is implemented: both fall back to uniform with a warning (there is no `stratify_by` parameter) |
 | `checkpoint` | `bool = False` | sentinel-based resumability (needs write access) |
-| `max_traces_per_run` | `int \| None = 1000` | budget gate; `None` disables |
+| `max_traces` | `int \| None = None` | budget gate on the post-sample, post-checkpoint trace count; `None` (the default) disables it. The CLI always passes one: `--max-traces`, else config `max_traces_per_run`, else 1000 |
 | `max_estimated_cost_usd` | `float \| None = None` | dollar gate on the pre-flight estimate |
 
 Raises `BudgetExceededError` before any trace fetch if a gate trips;
@@ -112,8 +114,9 @@ from docket.adapters.tracker.github import GitHubAdapter
 PhoenixAdapter(base_url, api_key=None, max_list_pages=...)
 LangfuseAdapter(host, public_key=None, secret_key=None, max_list_pages=...)
 LangsmithAdapter(endpoint, api_key, project=None, max_list_pages=...)
-JiraAdapter(host, project, email=None, api_token=None, pat=None,
-            deployment=None, max_list_pages=...)   # deployment: "cloud"|"datacenter"|None=auto
+JiraAdapter(
+    host, project, email=None, api_token=None, pat=None, deployment=None, max_list_pages=...
+)  # deployment: "cloud"|"datacenter"|None=auto
 LinearAdapter(team_id, api_key, endpoint=..., max_list_pages=...)
 GitHubAdapter(owner, repo, token, api_url=..., max_list_pages=...)
 ```
@@ -135,10 +138,12 @@ async def list_processed_trace_ids(run_id, since, until) -> set[str]    # checkp
 async def close() -> None
 ```
 
-`filter`'s reserved key `status` (`"ok"`/`"error"`) must be pushed down
-to the backend query or the adapter raises. Subclass this to integrate a
-backend we don't ship — implementation requirements and the parity-test
-expectations are in [adapters.md](adapters.md).
+Every shipped adapter ignores `filter`. `docket.models.listing` reserves
+a `status` key (`"ok"`/`"error"`) for a planned `--strategy errors-only`
+push-down, but nothing sends it yet. Subclass this to integrate a
+backend we don't ship — implementation requirements (including the
+intended filter contract) and the parity-test expectations are in
+[adapters.md](adapters.md).
 
 ### `docket.adapters.base.Tracker` (ABC)
 
@@ -158,14 +163,18 @@ async def close() -> None
 
 ```python
 from docket.llm import (
-    build_provider, build_embedding_provider,
-    ModelProvider, AnthropicProvider, OpenAIProvider,
-    EmbeddingProvider, OpenAIEmbeddingProvider,
-    DEFAULT_PROVIDER_URI,    # "anthropic:claude-haiku-4-5-20251001"
-    DEFAULT_EMBEDDING_URI,   # "openai:text-embedding-3-small"
+    build_provider,
+    build_embedding_provider,
+    ModelProvider,
+    AnthropicProvider,
+    OpenAIProvider,
+    EmbeddingProvider,
+    OpenAIEmbeddingProvider,
+    DEFAULT_PROVIDER_URI,  # "anthropic:claude-haiku-4-5-20251001"
+    DEFAULT_EMBEDDING_URI,  # "openai:text-embedding-3-small"
 )
 
-provider = build_provider("anthropic:claude-sonnet-4-6")   # "provider:model" URI
+provider = build_provider("anthropic:claude-sonnet-4-6")  # "provider:model" URI
 embedder = build_embedding_provider(DEFAULT_EMBEDDING_URI)
 ```
 
@@ -188,8 +197,9 @@ from docket.agent.subagents.classifier import Classifier
 
 classifier = Classifier(provider, batch_size=1, concurrency=8)
 results = await classifier.classify_all(
-    [(trace_id, open_inference_trace), ...], rubric,
-)   # -> dict[trace_id, list[Classification]]
+    [(trace_id, open_inference_trace), ...],
+    rubric,
+)  # -> dict[trace_id, list[Classification]]
 ```
 
 Retries each (trace, mode) up to 3 times with backoff, then marks it
@@ -200,7 +210,7 @@ errored rather than raising.
 ## Rubrics
 
 ```python
-from docket.rubric.loader import load_rubric        # resolves + merges imports
+from docket.rubric.loader import load_rubric  # resolves + merges imports
 from docket.rubric.validator import validate_rubric_yaml
 from docket.rubric.spec import Rubric, Mode, Detection
 ```
