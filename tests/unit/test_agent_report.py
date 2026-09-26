@@ -128,7 +128,9 @@ def test_render_report_renders_dedup_outcomes_section() -> None:
     assert "`AGT-2`" in md
     # needs_create has no issue → em dash placeholder.
     assert "needs_create" in md
-    # Footer mentions --review.
+    # Footer names what stays queued and both ways to post it.
+    assert "`needs_create` and `failed` drafts remain" in md
+    assert "docket queue post" in md
     assert "--review" in md
 
 
@@ -148,8 +150,9 @@ def test_render_report_includes_tracker_failures_section() -> None:
     assert "## Tracker failures" in md
     assert "`c-001`" in md
     assert "upstream timeout" in md
-    # The operator is told failed drafts stay replayable.
+    # The operator is told failed drafts stay replayable, and how.
     assert "local queue" in md
+    assert "docket queue post" in md
 
 
 def test_render_report_omits_tracker_failures_section_when_none() -> None:

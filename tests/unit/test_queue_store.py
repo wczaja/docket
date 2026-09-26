@@ -1,12 +1,16 @@
 import json
+import logging
 from pathlib import Path
 
-from docket.models.issue import IssueDraft, make_labels
+import pytest
+
+from docket.models.issue import Issue, IssueDraft, make_labels
 from docket.queue_store import (
     POSTED_SUBDIR,
     clear_queue,
     list_queued_drafts,
     mark_posted,
+    retire_drafts,
 )
 
 
@@ -64,6 +68,53 @@ def test_mark_posted_moves_files_and_records_url(tmp_path: Path) -> None:
     assert (tmp_path / POSTED_SUBDIR / "c9.md").exists()
     # The queue no longer lists the posted draft (posted/ is not scanned).
     assert list_queued_drafts(tmp_path) == []
+
+
+def _issue(key: str) -> Issue:
+    return Issue(id=key, key=key, url=f"https://tracker.example/{key}", title="t", body="b")
+
+
+def test_retire_drafts_moves_only_the_named_drafts(tmp_path: Path) -> None:
+    for cluster_id in ("c1", "c2", "c3"):
+        _write_queue_files(tmp_path, _draft(cluster_id))
+    retired = retire_drafts(
+        # c2's issue is unknown; "gone" has no queued draft and is ignored.
+        {"c1": _issue("AGT-1"), "c2": None, "gone": _issue("AGT-9")},
+        queue_dir=tmp_path,
+    )
+    assert retired == 2
+    assert [q.draft.cluster_id for q in list_queued_drafts(tmp_path)] == ["c3"]
+    posted = tmp_path / POSTED_SUBDIR
+    c1 = json.loads((posted / "c1.json").read_text())
+    assert c1["posted_issue_url"] == "https://tracker.example/AGT-1"
+    assert "posted_issue_url" not in json.loads((posted / "c2.json").read_text())
+    assert (posted / "c1.md").exists()
+    assert (posted / "c2.md").exists()
+
+
+def test_retire_drafts_replaces_an_earlier_retirement(tmp_path: Path) -> None:
+    # Re-running a window re-drafts the same cluster into the queue; retiring
+    # it again must overwrite the posted/ copy, not trip over it.
+    _write_queue_files(tmp_path, _draft("c1"))
+    assert retire_drafts({"c1": _issue("AGT-1")}, queue_dir=tmp_path) == 1
+    _write_queue_files(tmp_path, _draft("c1").model_copy(update={"title": "Re-drafted"}))
+    assert retire_drafts({"c1": _issue("AGT-1")}, queue_dir=tmp_path) == 1
+    assert list_queued_drafts(tmp_path) == []
+    posted = tmp_path / POSTED_SUBDIR
+    assert json.loads((posted / "c1.json").read_text())["title"] == "Re-drafted"
+    assert "Re-drafted" in (posted / "c1.md").read_text()
+
+
+def test_retire_drafts_failure_is_logged_and_leaves_draft_queued(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    _write_queue_files(tmp_path, _draft("c1"))
+    (tmp_path / POSTED_SUBDIR).write_text("a file where the directory should be")
+    with caplog.at_level(logging.WARNING, logger="docket.queue_store"):
+        assert retire_drafts({"c1": _issue("AGT-1")}, queue_dir=tmp_path) == 0
+    assert "could not retire queued draft c1" in caplog.text
+    # Still queued, so the next replay dedups it again.
+    assert [q.draft.cluster_id for q in list_queued_drafts(tmp_path)] == ["c1"]
 
 
 def test_clear_queue_removes_only_queued(tmp_path: Path) -> None:

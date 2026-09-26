@@ -97,8 +97,9 @@ See [docs/local-langsmith.md](local-langsmith.md).
 ## Configure a tracker (optional)
 
 If no `--tracker` flag is set, docket queues drafts to local files
-and stops. To dedup against an existing tracker and (optionally)
-auto-post:
+and stops; once a tracker is configured, `docket queue post` files them
+(see [the local queue](#the-local-queue)). To dedup against an existing
+tracker and (optionally) auto-post:
 
 ### Jira (Cloud or Data Center)
 
@@ -189,12 +190,13 @@ docket run \
 
 - Reads traces (no writeback to backend).
 - Classifies + clusters + drafts.
-- Writes drafts to `~/.docket/queued-issues/<run-id>/`.
+- Writes drafts to the local queue, `~/.docket/queued-issues/`
+  (`<cluster_id>.json` + `.md`).
 - Writes a markdown report to the same directory.
 - **Posts nothing to a tracker** (no `--tracker` flag).
 
-Good for first runs. Inspect the queued files; if the drafts look
-reasonable, layer a tracker on top.
+Good for first runs. Inspect the queued files (`docket queue list`); if
+the drafts look reasonable, layer a tracker on top.
 
 ### B. Dedup against tracker, queue new drafts locally
 
@@ -209,7 +211,9 @@ docket run ... \
   listing only the new trace IDs.
 - If a match exists and the cluster is unchanged, skips silently
   (idempotent — re-runs post nothing extra).
-- If no match, queues the draft locally for human review.
+- If no match, leaves the draft queued locally for human review.
+- Drafts that matched an open issue (commented or skipped) leave the
+  queue, so it only holds drafts that still need a decision.
 
 This is the safest mode once a tracker is configured: comments are
 additive (a human is already on the issue), and new issues require
@@ -226,7 +230,8 @@ For each `needs_create` outcome, the runtime:
 1. Opens the draft markdown in `$EDITOR`.
 2. On editor exit, re-parses the title and Description.
 3. Prompts `y/n` to post.
-4. Posts accepted drafts; leaves rejected ones in the queue.
+4. Posts accepted drafts, retiring them from the queue; leaves rejected
+   ones queued.
 
 When `$EDITOR` is unset, the runtime prints the draft to stdout and
 prompts y/n without an editor step. Use this in CI or minimal
@@ -245,6 +250,27 @@ trust the false-positive rate, you can ratchet the threshold down.
 
 Combine with `--review` to auto-post above threshold AND open lower-
 severity drafts for review in the same run.
+
+## The local queue
+
+Every draft is written to the queue directory (`~/.docket/queued-issues/`,
+or `--queue-dir`) before docket calls the tracker, so a tracker outage
+never loses one. Once tracker dedup has handled a draft (it created the
+issue, or found an open issue already tracking the cluster), the draft
+moves to the queue's `posted/` subdirectory with that issue's URL
+recorded. What stays queued is what still needs a tracker write: every
+draft when no tracker is configured; otherwise `needs_create` drafts and
+drafts whose tracker write failed.
+
+```bash
+docket queue list                        # what's waiting
+docket queue post --config docket.yaml   # file it, one prompt per draft
+```
+
+`queue post` runs each draft through the same dedup first, so a draft
+whose cluster has an open issue by now (its comment failed mid-run, or a
+later run over the same traces filed it) comments there instead of
+filing a duplicate. See the [CLI reference](cli.md#docket-queue).
 
 ## Config file
 

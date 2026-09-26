@@ -11,6 +11,7 @@ docket [--version] [-h]
   init       interactively scaffold a docket.yaml
   run        one-shot pipeline over a time window
   serve      the same pipeline on a fixed cadence (daemon)
+  queue      inspect and replay the local draft queue
   validate   schema-validate a rubric (no network, no credentials)
   self-test  run a rubric's examples through live detectors
 ```
@@ -180,8 +181,9 @@ docket run --backend phoenix --phoenix-url http://localhost:6006 \
 
 Per-trace fetch failures and per-trace classifier failures (after 3
 retries) do **not** abort the run; they're skipped and counted in the
-report. Tracker write failures queue the draft locally instead of
-failing the run.
+report. Tracker write failures leave the draft in the local queue
+(replay it with [`docket queue post`](#docket-queue)) instead of failing
+the run.
 
 ---
 
@@ -210,6 +212,38 @@ loudly; that's intentional). Config and credential errors exit
 immediately with code 1. Stop with Ctrl-C / SIGTERM. Each tick gets a
 fresh window-derived `run_id`, so annotations and tracker dedup behave
 exactly as if cron invoked `run`.
+
+---
+
+## `docket queue`
+
+Inspects and replays the local draft queue (`--queue-dir`, default
+`~/.docket/queued-issues/`). `run` and `serve` write every draft there,
+as `<cluster_id>.json` + `.md`, before any tracker call. Once tracker
+dedup has handled a draft (`created`, `commented`, or `skipped`), its
+files move to the queue's `posted/` subdirectory with the issue URL
+recorded, so what stays queued is what still needs a tracker write:
+
+- every draft, when no tracker is configured;
+- `needs_create` drafts: below `auto_post_threshold`, or rejected in
+  `--review` (accepted ones leave the queue when posted);
+- `failed` drafts, whose tracker write failed mid-run.
+
+```bash
+docket queue list
+docket queue post --config docket.yaml --yes
+```
+
+| Subcommand | Meaning |
+|---|---|
+| `queue list` | One line per queued draft: cluster, severity, mode, title |
+| `queue post` | Replay queued drafts through the same dedup as `run`, then retire them to `posted/`: comment on (or skip) an open issue that already tracks the cluster, else create one, whatever the draft's severity. Prompts per draft unless `--yes`; `--cluster ID` (repeatable) narrows it. Takes `run`'s tracker flags or the config's `tracker:`. Exits 1 if any draft failed; failed drafts stay queued |
+| `queue clear` | Delete every queued draft (`posted/` is kept). Confirms unless `--yes` |
+
+Because `queue post` dedups first, a draft whose cluster gained an open
+issue after it was queued (its comment failed mid-run, or a later run
+over the same traces filed it) is added to that issue instead of filed
+as a duplicate.
 
 ---
 

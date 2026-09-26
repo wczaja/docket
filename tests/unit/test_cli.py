@@ -315,6 +315,110 @@ def test_run_passes_run_id_override(tmp_path: Path) -> None:
     assert captured.get("run_id") == "my-explicit-run-id"
 
 
+def test_run_review_retires_posted_drafts_from_the_queue(tmp_path: Path) -> None:
+    """A draft posted in --review leaves the queue, so `docket queue post`
+    can't file it a second time; a rejected draft stays queued."""
+    import json
+    from datetime import UTC, datetime
+
+    from docket.agent.subagents.poster import DedupOutcome
+    from docket.agent.triage import TriageResult
+    from docket.models.issue import Issue, IssueDraft, make_labels
+    from docket.models.report import RunReport
+
+    drafts = [
+        IssueDraft(
+            cluster_id=cluster_id,
+            mode_id="hallucination",
+            rubric_version="agents-builtin@1.0.0",
+            run_id="abc123",
+            severity="low",
+            representative_trace_id="t-1",
+            member_trace_ids=["t-1"],
+            title=f"Synthetic failure {cluster_id}",
+            body="A synthetic body.",
+            labels=make_labels("hallucination", "agents-builtin@1.0.0"),
+        )
+        for cluster_id in ("c1", "c2")
+    ]
+    queue_dir = tmp_path / "queue"
+    queue_dir.mkdir()
+    for d in drafts:
+        (queue_dir / f"{d.cluster_id}.json").write_text(json.dumps(d.to_json_record()))
+        (queue_dir / f"{d.cluster_id}.md").write_text(d.to_markdown())
+
+    async def fake_run(**_kwargs: object) -> TriageResult:
+        report = RunReport(
+            run_id="abc123",
+            rubric_name="agents-builtin",
+            rubric_version="1.0.0",
+            since=datetime(2026, 5, 22, tzinfo=UTC),
+            until=datetime(2026, 5, 22, 1, 0, tzinfo=UTC),
+            started_at=datetime(2026, 5, 22, tzinfo=UTC),
+            finished_at=datetime(2026, 5, 22, 0, 0, 1, tzinfo=UTC),
+            trace_count=0,
+        )
+        return TriageResult(
+            run_report=report,
+            clusters=[],
+            drafts=drafts,
+            report_markdown="# docket run `abc123`\n",
+            dedup_outcomes=[DedupOutcome(draft=d, action="needs_create") for d in drafts],
+        )
+
+    class _NoopBackend:
+        async def close(self) -> None:
+            return None
+
+    class _Tracker:
+        async def create_issue(self, draft: IssueDraft) -> Issue:
+            return Issue(
+                id="AGT-1",
+                key="AGT-1",
+                url="https://tracker.example/AGT-1",
+                title=draft.title,
+                body=draft.body,
+            )
+
+        async def close(self) -> None:
+            return None
+
+    runner = CliRunner()
+    with (
+        patch("docket.cli.build_backend", return_value=_NoopBackend()),
+        patch("docket.cli.build_tracker", return_value=_Tracker()),
+        patch("docket.cli.run_triage_pipeline", side_effect=fake_run),
+        patch("docket.cli.build_provider"),
+    ):
+        result = runner.invoke(
+            main,
+            [
+                "run",
+                "--backend",
+                "phoenix",
+                "--phoenix-url",
+                "http://test:6006",
+                "--rubric",
+                "docket.dev/builtin/agents/v1",
+                "--config",
+                str(tmp_path / "missing.yaml"),
+                "--since",
+                "1h",
+                "--queue-dir",
+                str(queue_dir),
+                "--review",
+            ],
+            input="y\nn\n",  # post c1, reject c2
+            env={"EDITOR": ""},
+        )
+    assert result.exit_code == 0, result.output
+    assert not (queue_dir / "c1.json").exists()
+    record = json.loads((queue_dir / "posted" / "c1.json").read_text())
+    assert record["posted_issue_url"] == "https://tracker.example/AGT-1"
+    assert (queue_dir / "c2.json").exists()
+    assert not (queue_dir / "posted" / "c2.json").exists()
+
+
 def test_run_rejects_bad_duration(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(

@@ -5,6 +5,7 @@ import logging
 import re
 import sys
 import time
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -1011,12 +1012,24 @@ def run(  # noqa: PLR0913 -- CLI options form one logical unit
                 )
             if review and tracker_adapter is not None:
                 from docket.agent.review import review_and_post
+                from docket.queue_store import retire_drafts
 
                 review_outcomes = await review_and_post(
                     pipeline_result.dedup_outcomes,
                     tracker=tracker_adapter,
                 )
                 pipeline_result.review_outcomes = review_outcomes
+                # Accepted drafts are filed now: retire their queue files so
+                # `docket queue post` can't file them a second time.
+                await asyncio.to_thread(
+                    retire_drafts,
+                    {
+                        o.draft.cluster_id: o.posted_issue
+                        for o in review_outcomes
+                        if o.action == "posted"
+                    },
+                    queue_dir=queue_dir,
+                )
             return pipeline_result
         finally:
             await adapter.close()
@@ -1173,9 +1186,12 @@ def self_test_cmd(source: str, batch_size: int, provider: str, model: str | None
 def queue() -> None:
     """Inspect and replay locally queued issue drafts.
 
-    Drafts land in the queue when no tracker is configured, when their
-    severity is below `auto_post_threshold`, or when a tracker write
-    failed mid-run. `queue post` is the replay half of that contract.
+    Every draft is written to the queue before any tracker call; once
+    tracker dedup has handled one (created, commented, or skipped), its
+    files retire to `posted/`. So drafts stay queued when no tracker is
+    configured, when their severity is below `auto_post_threshold`, or
+    when a tracker write failed mid-run. `queue post` is the replay half
+    of that contract, and dedups each draft against the tracker first.
     """
 
 
@@ -1266,12 +1282,16 @@ def queue_post(  # noqa: PLR0913 -- tracker options form one logical unit
 ) -> None:
     """Post queued drafts to the tracker, then retire them to posted/.
 
-    Each successfully posted draft's files move into the queue's `posted/`
+    Each draft goes through the same dedup as `docket run` first: if an
+    open issue already tracks its cluster, new trace IDs are commented
+    there (nothing is posted when there are none) instead of filing a
+    duplicate; otherwise a new issue is created, whatever the draft's
+    severity. Either way the draft's files move into the queue's `posted/`
     subdirectory so a replay can never double-post. Failures leave the
     draft in place and continue with the next one.
     """
-    from docket.errors import TrackerError
-    from docket.queue_store import list_queued_drafts, mark_posted
+    from docket.agent.subagents.poster import dedup_drafts
+    from docket.queue_store import TRACKED_ACTIONS, list_queued_drafts, mark_posted
 
     _configure_logging(quiet=False, verbose=0)
     try:
@@ -1313,9 +1333,8 @@ def queue_post(  # noqa: PLR0913 -- tracker options form one logical unit
         asyncio.run(tracker_adapter.close())
         return
 
-    async def _post_all() -> tuple[int, int]:
-        posted = 0
-        failed = 0
+    async def _post_all() -> Counter[str]:
+        actions: Counter[str] = Counter()
         try:
             for q in queued:
                 d = q.draft
@@ -1324,22 +1343,44 @@ def queue_post(  # noqa: PLR0913 -- tracker options form one logical unit
                 ):
                     click.echo(f"skipped {d.cluster_id}")
                     continue
-                try:
-                    issue = await tracker_adapter.create_issue(d)
-                except TrackerError as e:
-                    failed += 1
-                    click.echo(f"FAILED {d.cluster_id}: {e}", err=True)
+                # Posting is the operator's explicit ask, so every severity
+                # meets the threshold: dedup either finds the open issue
+                # already tracking this cluster or creates one.
+                (outcome,) = await dedup_drafts(
+                    [d], tracker=tracker_adapter, auto_post_threshold="low"
+                )
+                issue = outcome.created_issue or outcome.existing_issue
+                if outcome.action == "failed":
+                    actions["failed"] += 1
+                    click.echo(f"FAILED {d.cluster_id}: {outcome.failure_reason}", err=True)
+                    continue
+                if outcome.action not in TRACKED_ACTIONS or issue is None:
+                    click.echo(f"skipped {d.cluster_id}: {outcome.action}, left queued")
                     continue
                 mark_posted(q, issue_url=issue.url)
-                posted += 1
-                click.echo(f"posted {d.cluster_id} -> {issue.url or issue.id}")
+                actions[outcome.action] += 1
+                ref = issue.url or issue.id
+                if outcome.action == "created":
+                    click.echo(f"posted {d.cluster_id} -> {ref}")
+                elif outcome.action == "commented":
+                    new = len(outcome.new_member_trace_ids)
+                    click.echo(f"commented {d.cluster_id} -> {ref} ({new} new trace(s))")
+                else:
+                    click.echo(f"already tracked {d.cluster_id} -> {ref}")
         finally:
             await tracker_adapter.close()
-        return posted, failed
+        return actions
 
-    posted, failed = asyncio.run(_post_all())
-    click.echo(f"\n{posted} posted, {failed} failed, {len(queued) - posted - failed} skipped.")
-    if failed:
+    actions = asyncio.run(_post_all())
+    # The trailing "skipped" counts drafts nothing happened to: declined at
+    # the prompt, or left queued by dedup. Dedup's own `skipped` action (an
+    # open issue already lists every trace) reads "already tracked".
+    click.echo(
+        f"\n{actions['created']} posted, {actions['commented']} commented, "
+        f"{actions['skipped']} already tracked, {actions['failed']} failed, "
+        f"{len(queued) - actions.total()} skipped."
+    )
+    if actions["failed"]:
         sys.exit(1)
 
 

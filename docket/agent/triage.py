@@ -57,6 +57,7 @@ from docket.models.report import (
 )
 from docket.models.trace import OpenInferenceTrace
 from docket.observability import redact
+from docket.queue_store import POSTED_SUBDIR, TRACKED_ACTIONS, retire_drafts
 from docket.rubric.spec import Rubric
 
 log = logging.getLogger(__name__)
@@ -446,6 +447,22 @@ async def run_triage_pipeline(
             len(tracker_failures),
             len(dedup_outcomes),
         )
+
+    # 5c. Retire the queue files of drafts the tracker now represents: a
+    # created issue, or an open issue already tracking the cluster
+    # (commented / skipped). Only `needs_create` and `failed` drafts stay
+    # queued, so `docket queue post` can't re-file a tracked failure. The
+    # drafter wrote every draft before dedup, so a crash before this point
+    # leaves drafts queued rather than lost; `queue post` dedups them again.
+    tracked = {
+        o.draft.cluster_id: o.created_issue or o.existing_issue
+        for o in dedup_outcomes
+        if o.action in TRACKED_ACTIONS
+    }
+    if tracked:
+        queue_dir = output_dir if output_dir is not None else DEFAULT_QUEUE_DIR
+        retired = await asyncio.to_thread(retire_drafts, tracked, queue_dir=queue_dir)
+        log.info("retired %d tracked draft(s) to %s", retired, queue_dir / POSTED_SUBDIR)
 
     # 6. Report. `trace_results` covers only traces that were actually
     # fetched; never-fetched traces are surfaced separately as

@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`docket queue post` no longer re-files tracked failures.** The
+  drafter queues every draft before tracker dedup, but nothing retired
+  the drafts dedup then handled, and `queue post` created an issue for
+  every queued draft without dedup. So running it after a normal
+  tracker-enabled run filed duplicates of issues that already existed or
+  had just been commented on. Now:
+  - After dedup, drafts the tracker represents (`created`, `commented`,
+    `skipped`) move to the queue's `posted/` subdirectory with the issue
+    URL, and so do drafts `--review` posts. Only `needs_create` and
+    `failed` drafts stay queued, as the `queue` help and the report
+    footer already said.
+  - `queue post` runs each draft through the same dedup first. Replaying
+    a draft whose cluster already has an open issue (for example, one
+    whose comment failed mid-run) comments there, or skips, instead of
+    filing a duplicate. Its summary now counts `posted`, `commented`,
+    `already tracked`, `failed` and `skipped` separately.
+- `docs/cli.md` documents the `docket queue` commands.
+
 ## [1.1.0] - 2026-07-04
 
 ### Added
@@ -116,5 +138,6 @@ plus the budget-guardrail work originally scheduled for Phase 11.
 - Documentation set: quickstart, concepts, rubric DSL reference, adapter
   guide, per-backend/tracker setup guides, benchmarks, security policy.
 
+[Unreleased]: https://github.com/wczaja/docket/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/wczaja/docket/releases/tag/v1.1.0
 [1.0.0]: https://github.com/wczaja/docket/releases/tag/v1.0.0

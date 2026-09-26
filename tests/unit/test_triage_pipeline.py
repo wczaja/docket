@@ -8,13 +8,15 @@ from unittest.mock import patch
 
 import pytest
 
-from docket.adapters.base import TraceBackend
+from docket.adapters.base import TraceBackend, Tracker
 from docket.agent.triage import compute_run_id, run_triage_pipeline
-from docket.errors import BudgetExceededError, CredentialError
+from docket.errors import BudgetExceededError, CredentialError, TrackerError
 from docket.llm.base import ModelProvider
 from docket.llm.embeddings import EmbeddingProvider
 from docket.models.classification import Annotation, Classification
+from docket.models.issue import Issue
 from docket.models.trace import OpenInferenceTrace, Span
+from docket.queue_store import list_queued_drafts
 from docket.rubric.spec import Clustering, Detection, Mode, Rubric, RubricMetadata
 
 
@@ -422,6 +424,164 @@ async def test_pipeline_skips_eval_emission_by_default(tmp_path: Path) -> None:
         output_dir=tmp_path,
     )
     assert result.eval_case_paths == []
+
+
+# --- tracker dedup retires handled drafts from the local queue ----------------
+
+
+class _InMemoryTracker(Tracker):
+    """Open issues in a dict: what one run files, the next run lists.
+
+    `create_issue` raises for drafts of `fail_create_modes`, the per-draft
+    tracker write failure the pipeline must contain.
+    """
+
+    def __init__(self, *, fail_create_modes: frozenset[str] = frozenset()) -> None:
+        self.issues: dict[str, Issue] = {}
+        self.comments: list[tuple[str, str]] = []
+        self.fail_create_modes = fail_create_modes
+
+    async def list_open_issues(self, filter=None):  # type: ignore[no-untyped-def]
+        wanted = set((filter or {}).get("labels") or [])
+        return [i for i in self.issues.values() if wanted.issubset(i.labels)]
+
+    async def search_issues(self, query, k=10):  # type: ignore[no-untyped-def]
+        raise NotImplementedError
+
+    async def create_issue(self, draft):  # type: ignore[no-untyped-def]
+        if draft.mode_id in self.fail_create_modes:
+            raise TrackerError(f"simulated create failure for {draft.mode_id}")
+        key = f"AGT-{len(self.issues) + 1}"
+        self.issues[key] = Issue(
+            id=key,
+            key=key,
+            url=f"https://tracker.example/{key}",
+            title=draft.title,
+            body=draft.body,
+            labels=draft.labels,
+        )
+        return self.issues[key]
+
+    async def update_issue(self, issue_id, patch):  # type: ignore[no-untyped-def]
+        updated = self.issues[issue_id].model_copy(update=patch.model_dump(exclude_none=True))
+        self.issues[issue_id] = updated
+        return updated
+
+    async def comment_on_issue(self, issue_id, comment):  # type: ignore[no-untyped-def]
+        self.comments.append((issue_id, comment))
+
+
+def _five_mode_rubric() -> Rubric:
+    """One regex mode per word; `says-bravo` alone sits below `high`."""
+    severities = {
+        "alpha": "high",
+        "bravo": "medium",
+        "charlie": "high",
+        "delta": "high",
+        "echo": "high",
+    }
+    return Rubric(
+        apiVersion="docket.dev/v1",
+        kind="Rubric",
+        metadata=RubricMetadata(name="testbench", version="0.1.0"),
+        modes=[
+            Mode(id=f"says-{word}", severity=sev, detection=Detection(type="regex", pattern=word))
+            for word, sev in severities.items()
+        ],
+        clustering=Clustering(min_cluster_size=2),
+    )
+
+
+def _word_traces(word: str, *ids: int) -> dict[str, OpenInferenceTrace]:
+    return {f"{word}-{i}": _trace(f"{word}-{i}", f"{word} happened") for i in ids}
+
+
+async def test_tracker_run_leaves_only_needs_create_and_failed_drafts_queued(
+    tmp_path: Path,
+) -> None:
+    """The drafter queues every draft before dedup; afterwards only drafts
+    that still need a tracker write may stay queued, or `docket queue post`
+    would re-file issues the tracker already has."""
+    backend = _FakeBackend({**_word_traces("charlie", 1, 2), **_word_traces("delta", 1, 2)})
+    tracker = _InMemoryTracker(fail_create_modes=frozenset({"says-echo"}))
+    kwargs: dict[str, Any] = {
+        "backend": backend,
+        "rubric": _five_mode_rubric(),
+        "since": datetime(2026, 5, 22, 0, 0, 0, tzinfo=UTC),
+        "until": datetime(2026, 5, 22, 1, 0, 0, tzinfo=UTC),
+        "llm_provider": _MockLLMProvider(),
+        "output_dir": tmp_path,
+        "tracker": tracker,
+        "auto_post_threshold": "high",
+        "clustering": "mode-only",
+    }
+    # Run 1 files charlie and delta; both drafts retire straight away.
+    first = await run_triage_pipeline(**kwargs)
+    assert [o.action for o in first.dedup_outcomes] == ["created", "created"]
+    assert list_queued_drafts(tmp_path) == []
+
+    # Run 2: charlie is unchanged (skipped), delta grew (commented), alpha is
+    # new (created), bravo is below the threshold, echo's create fails.
+    backend.traces.update(
+        {**_word_traces("alpha", 1, 2), **_word_traces("bravo", 1, 2), **_word_traces("echo", 1, 2)}
+    )
+    backend.traces.update(_word_traces("delta", 3))
+    second = await run_triage_pipeline(**kwargs)
+
+    actions = {o.draft.mode_id: o.action for o in second.dedup_outcomes}
+    assert actions == {
+        "says-alpha": "created",
+        "says-bravo": "needs_create",
+        "says-charlie": "skipped",
+        "says-delta": "commented",
+        "says-echo": "failed",
+    }
+    assert sorted(q.draft.mode_id for q in list_queued_drafts(tmp_path)) == [
+        "says-bravo",
+        "says-echo",
+    ]
+    # Each retired draft records the issue that now represents it. Delta's
+    # growth changed its cluster id, so run 1's delta draft keeps its own
+    # record; charlie's re-drafted file replaced run 1's.
+    url_by_mode = {
+        label.removeprefix("mode:"): issue.url
+        for issue in tracker.issues.values()
+        for label in issue.labels
+        if label.startswith("mode:")
+    }
+    posted_dir = tmp_path / "posted"
+    posted = [json.loads(p.read_text()) for p in posted_dir.glob("*.json")]
+    assert sorted((r["mode_id"], r["posted_issue_url"]) for r in posted) == [
+        ("says-alpha", url_by_mode["says-alpha"]),
+        ("says-charlie", url_by_mode["says-charlie"]),
+        ("says-delta", url_by_mode["says-delta"]),
+        ("says-delta", url_by_mode["says-delta"]),
+    ]
+    # Markdown copies travel with their JSON.
+    assert {p.stem for p in posted_dir.glob("*.md")} == {r["cluster_id"] for r in posted}
+    queued_md = {p.stem for p in tmp_path.glob("*.md")}  # noqa: ASYNC240
+    assert queued_md == {q.draft.cluster_id for q in list_queued_drafts(tmp_path)} | {"report"}
+    # Run 2 re-filed neither charlie nor delta.
+    assert len(tracker.issues) == 3
+    assert "`needs_create` and `failed` drafts remain" in second.report_markdown
+    assert "docket queue post" in second.report_markdown
+
+
+async def test_run_without_tracker_keeps_every_draft_queued(tmp_path: Path) -> None:
+    backend = _FakeBackend({f"t-{i}": _trace(f"t-{i}", "hello there!") for i in range(5)})
+    result = await run_triage_pipeline(
+        backend=backend,
+        rubric=_rubric(),
+        since=datetime(2026, 5, 22, 0, 0, 0, tzinfo=UTC),
+        until=datetime(2026, 5, 22, 1, 0, 0, tzinfo=UTC),
+        llm_provider=_MockLLMProvider(),
+        embedding_provider=_MockEmbeddingProvider(),
+        output_dir=tmp_path,
+    )
+    assert [q.draft.cluster_id for q in list_queued_drafts(tmp_path)] == [
+        d.cluster_id for d in result.drafts
+    ]
+    assert not (tmp_path / "posted").exists()
 
 
 # --- M-10: classifier credential preflight -----------------------------------
