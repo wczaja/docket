@@ -567,7 +567,7 @@ agent, state = build_triage_agent(
     embedding_provider=...,
     since=...,
     until=...,
-    agent_model="anthropic:claude-sonnet-4-6",   # default is haiku
+    agent_model="anthropic:claude-sonnet-4-6",  # default is haiku
 )
 ```
 

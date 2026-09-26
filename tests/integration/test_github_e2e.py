@@ -22,7 +22,7 @@ import pytest
 
 from docket.adapters.tracker.github import GitHubAdapter
 from docket.agent.subagents.poster import dedup_drafts
-from docket.models.issue import IssueDraft, IssuePatch, make_labels
+from docket.models.issue import IssueDraft, IssuePatch, IssueProvenance, make_labels
 
 pytestmark = pytest.mark.integration
 
@@ -40,17 +40,30 @@ def github_adapter() -> GitHubAdapter:
 def _draft_for_test(*, cluster_id: str, members: list[str]) -> IssueDraft:
     mode_id = f"e2e-mode-{cluster_id}"
     rubric_version = "docket-e2e@0.0.0"
+    run_id = f"e2e-{uuid.uuid4().hex[:8]}"
+    # Dedup finds the existing issue only through the provenance block at
+    # the end of its body, so end the body with one, as the drafter does.
+    provenance = IssueProvenance(
+        rubric_version=rubric_version,
+        mode_id=mode_id,
+        cluster_id=cluster_id,
+        representative_trace_id=members[0],
+        run_id=run_id,
+        member_trace_ids=members,
+    )
+    body = (
+        "This is an automated test issue created by docket's gated E2E test. It is safe to delete."
+    )
     return IssueDraft(
         cluster_id=cluster_id,
         mode_id=mode_id,
         rubric_version=rubric_version,
-        run_id=f"e2e-{uuid.uuid4().hex[:8]}",
+        run_id=run_id,
         severity="medium",
         representative_trace_id=members[0],
         member_trace_ids=members,
         title=f"docket e2e test ({cluster_id})",
-        body="This is an automated test issue created by docket's gated "
-        "E2E test. It is safe to delete.",
+        body=f"{body}\n\n{provenance.to_html_comment()}",
         labels=[*make_labels(mode_id, rubric_version), "docket-test"],
     )
 
