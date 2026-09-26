@@ -66,8 +66,12 @@ auto_post_threshold: never
 - **Dedup** — the pipeline queries Linear's `issues` connection filtered by
   team + open states (`backlog`, `unstarted`, `started`) + label names; for
   each candidate it parses the embedded HTML provenance comment and looks
-  for a `cluster_id` match. Match → comment on existing issue (or skip if
-  no new members); no match → see auto-post / review below.
+  for a match by `cluster_id`, by shared traces (a grown cluster), or by
+  lineage: the open issue for the same mode and rubric version, which is
+  how a recurrence in a later window finds its issue. Match → record the
+  new traces in the description's provenance comment (`issueUpdate`),
+  then comment on the existing issue (or skip if no new members); no
+  match → see auto-post / review below.
 - **Labels** — Linear labels are first-class workspace entities. The
   adapter resolves the three label strings (`docket`,
   `mode:<id>`, `rubric:<id>@<ver>`) to label IDs on first use, creates any

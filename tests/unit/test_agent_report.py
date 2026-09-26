@@ -231,3 +231,63 @@ def test_render_report_includes_error_inventory() -> None:
     assert "## Detector errors" in md
     assert "`t-fail`" in md
     assert "hallucination" in md
+
+
+def test_render_report_shows_how_dedup_matched_and_truncation_demotions() -> None:
+    draft = IssueDraft(
+        cluster_id="c-010",
+        mode_id="refusal-leakage",
+        rubric_version="agents-builtin@1.0.0",
+        run_id="run-002",
+        severity="high",
+        representative_trace_id="t-9",
+        member_trace_ids=["t-9"],
+        title="t",
+        body="b",
+        labels=make_labels("refusal-leakage", "agents-builtin@1.0.0"),
+    )
+    existing = Issue(id="100", key="AGT-1", title="existing", body="body", labels=[])
+    outcomes = [
+        DedupOutcome(
+            draft=draft,
+            action="commented",
+            existing_issue=existing,
+            matched_by="lineage",
+        ),
+        DedupOutcome(
+            draft=draft.model_copy(update={"cluster_id": "c-011"}),
+            action="skipped",
+            existing_issue=existing,
+            matched_by="member_overlap",
+        ),
+        DedupOutcome(
+            draft=draft.model_copy(update={"cluster_id": "c-012"}),
+            action="needs_create",
+            auto_post_demoted=True,
+        ),
+    ]
+    md = render_report(run_report=_run_report(), clusters=[], drafts=[], dedup_outcomes=outcomes)
+    assert "| cluster | action | matched by | tracker issue |" in md
+    assert "| `c-010` | commented | lineage | `AGT-1` |" in md
+    assert "| `c-011` | skipped | shared traces | `AGT-1` |" in md
+    assert "| `c-012` | needs_create (listing truncated) | — | — |" in md
+    assert "1 draft(s) met `auto_post_threshold` but were queued" in md
+
+
+def test_render_report_omits_truncation_note_without_demotions() -> None:
+    draft = IssueDraft(
+        cluster_id="c-020",
+        mode_id="refusal-leakage",
+        rubric_version="agents-builtin@1.0.0",
+        run_id="run-003",
+        severity="low",
+        representative_trace_id="t-1",
+        member_trace_ids=["t-1"],
+        title="t",
+        body="b",
+        labels=make_labels("refusal-leakage", "agents-builtin@1.0.0"),
+    )
+    outcomes = [DedupOutcome(draft=draft, action="needs_create")]
+    md = render_report(run_report=_run_report(), clusters=[], drafts=[], dedup_outcomes=outcomes)
+    assert "| `c-020` | needs_create | — | — |" in md
+    assert "page ceiling" not in md

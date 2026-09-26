@@ -4,6 +4,51 @@ All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Tracker dedup across windows.** `docket serve` tiles windows
+  exactly, so a failure that recurs in the next window shares no traces
+  with the issue filed for it. Dedup matched issues only by `cluster_id`
+  (a hash of the member traces) or trace overlap, so every recurring
+  window queued a duplicate draft, or with `auto_post_threshold` filed
+  a duplicate issue. Dedup now falls back to the draft's **lineage**:
+  the open issue for the same mode and rubric version gets a comment,
+  "Recurred in window …", listing the new trace IDs.
+- **Comments are posted at most once.** Before commenting, the poster
+  records the reported cluster and trace IDs in the issue's provenance
+  block (the dedup ledger), so re-running a window never repeats a
+  comment. This also fixes grown clusters, which re-commented the same
+  new traces on every re-run of their window.
+- **Truncated tracker listings demote auto-posts.** The docs described
+  this rule, but the code didn't implement it. `Tracker.list_open_issues_v2`
+  / `IssueListing` now exist, and the GitHub, Jira, and Linear adapters
+  flag a listing cut off at their page ceiling. The poster queues drafts
+  that matched nothing as `needs_create` instead of auto-posting a
+  possible duplicate.
+
+### Added
+
+- `lineage_matcher` on `run_triage_pipeline` and `dedup_drafts`: the
+  pluggable "same underlying failure?" decision (`LineageMatcher`,
+  default `match_mode_lineage`). Pass `None` for cluster-only dedup.
+- `Tracker.update_provenance`, with a default built on `update_issue`.
+  The Jira Cloud adapter patches only the provenance paragraph of the
+  live ADF document, so formatting humans added to the description
+  survives.
+- The report's `## Tracker dedup` table gains a `matched by` column and
+  notes drafts demoted by a truncated listing.
+
+### Changed
+
+- One open issue per failure mode per rubric version: with auto-posting,
+  a second cluster of the same mode in one window now lands as a comment
+  on the first cluster's issue rather than as a separate issue. Pass
+  `lineage_matcher=None` to keep one issue per cluster.
+- Dedup lists each label set once per run and sees its own writes,
+  instead of re-listing the tracker for every draft.
+
 ## [1.1.0] - 2026-07-04
 
 ### Added
@@ -116,5 +161,6 @@ plus the budget-guardrail work originally scheduled for Phase 11.
 - Documentation set: quickstart, concepts, rubric DSL reference, adapter
   guide, per-backend/tracker setup guides, benchmarks, security policy.
 
+[Unreleased]: https://github.com/wczaja/docket/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/wczaja/docket/releases/tag/v1.1.0
 [1.0.0]: https://github.com/wczaja/docket/releases/tag/v1.0.0

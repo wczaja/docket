@@ -35,6 +35,7 @@ from docket.adapters._retry import request_with_retry
 from docket.adapters.base import Tracker
 from docket.errors import TrackerError
 from docket.models.issue import Issue, IssueDraft, IssuePatch, IssueState
+from docket.models.listing import IssueListing
 from docket.observability import redact
 
 log = logging.getLogger(__name__)
@@ -116,6 +117,12 @@ class GitHubAdapter(Tracker):
         self,
         filter: dict[str, Any] | None = None,
     ) -> list[Issue]:
+        return (await self.list_open_issues_v2(filter)).issues
+
+    async def list_open_issues_v2(
+        self,
+        filter: dict[str, Any] | None = None,
+    ) -> IssueListing:
         labels = (filter or {}).get("labels") if filter else None
         params: dict[str, str | int] = {
             "state": "open",
@@ -148,7 +155,7 @@ class GitHubAdapter(Tracker):
                 _MAX_PAGES,
                 len(out),
             )
-        return out
+        return IssueListing(issues=out, truncated=bool(url), page_limit=_MAX_PAGES)
 
     async def search_issues(self, query: str, k: int = 10) -> list[Issue]:
         # Scope the search to this repo + open issues. The user query is

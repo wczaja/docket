@@ -5,12 +5,15 @@ block at the end of the body (machine-parseable, human-invisible) and tracker
 labels (queryable without parsing). The provenance enables idempotent dedup
 across runs — if the drafter sees an existing open issue with the same
 `mode:<id>` + `rubric:<id>@<version>` labels, it comments instead of creating
-a duplicate (Phase 8).
+a duplicate (Phase 8). Once an issue exists, the poster also keeps its dedup
+ledger in that block (`reported_cluster_ids` / `reported_trace_ids`), so a
+re-run never re-posts a comment it already made.
 """
 
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -29,6 +32,13 @@ _PROVENANCE_RE = re.compile(
 # Keeps serialized provenance (and thus issue bodies) under tracker size
 # limits; dedup overlap-matching still works on the first 100 members.
 _PROVENANCE_MEMBER_CAP = 100
+# The dedup ledger keeps only its most recent entries for the same reason.
+# Cluster ids are 12 hex chars, so the cluster ledger can afford to reach
+# further back than the trace ledger: it is what keeps re-runs of older
+# windows from re-commenting once their traces have aged out.
+_LEDGER_TRACE_CAP = _PROVENANCE_MEMBER_CAP
+_LEDGER_CLUSTER_CAP = 200
+_LEDGER_FIELDS = ("reported_cluster_ids", "reported_trace_ids")
 
 IssueState = Literal["open", "closed"]
 
@@ -42,15 +52,55 @@ class IssueProvenance(BaseModel):
     representative_trace_id: str
     run_id: str
     member_trace_ids: list[str] = Field(default_factory=list)
+    # Dedup ledger, maintained by the poster after the issue exists: the
+    # clusters (by id) and trace IDs it has since reported on the issue as
+    # comments — growth of the original cluster and recurrences in later
+    # windows. Oldest first, capped to the most recent entries.
+    reported_cluster_ids: list[str] = Field(default_factory=list)
+    reported_trace_ids: list[str] = Field(default_factory=list)
+
+    @property
+    def known_trace_ids(self) -> set[str]:
+        """Every trace ID this issue already accounts for."""
+        return {*self.member_trace_ids, *self.reported_trace_ids}
+
+    def with_reported(self, *, cluster_id: str, trace_ids: Iterable[str]) -> "IssueProvenance":
+        """Return a copy whose ledger also records one reported cluster."""
+        clusters = list(dict.fromkeys([*self.reported_cluster_ids, cluster_id]))
+        traces = list(dict.fromkeys([*self.reported_trace_ids, *trace_ids]))
+        return self.model_copy(
+            update={
+                "reported_cluster_ids": clusters[-_LEDGER_CLUSTER_CAP:],
+                "reported_trace_ids": traces[-_LEDGER_TRACE_CAP:],
+            }
+        )
 
     def to_html_comment(self) -> str:
         data: dict[str, Any] = self.model_dump()
+        # The ledger only exists once the poster has reported on an issue;
+        # leaving empty lists out keeps freshly drafted bodies unchanged.
+        for key in _LEDGER_FIELDS:
+            if not data[key]:
+                del data[key]
         members = data.get("member_trace_ids") or []
         if len(members) > _PROVENANCE_MEMBER_CAP:
             data["member_trace_ids"] = members[:_PROVENANCE_MEMBER_CAP]
             data["member_trace_ids_truncated"] = True
         payload = json.dumps(data, sort_keys=True)
         return f"<!-- {PROVENANCE_TAG} {payload} -->"
+
+    def replace_in_body(self, body: str) -> str:
+        """Return `body` with its live provenance block swapped for this one.
+
+        The live block is the LAST one (the one `parse_from_body` reads);
+        everything around it is kept verbatim. A body without a block gets
+        this one appended.
+        """
+        matches = list(_PROVENANCE_RE.finditer(body))
+        if not matches:
+            return f"{body}\n\n{self.to_html_comment()}" if body else self.to_html_comment()
+        last = matches[-1]
+        return body[: last.start()] + self.to_html_comment() + body[last.end() :]
 
     @classmethod
     def parse_from_body(cls, body: str) -> "IssueProvenance | None":

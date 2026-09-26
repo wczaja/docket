@@ -341,8 +341,23 @@ Re-running the same window:
   the report says so. Raise `GITHUB_/JIRA_/LINEAR_MAX_LIST_PAGES` in the
   tracker's env block or prune old docket issues.
 
+Running the *next* window, when a known failure recurs:
+
+- The recurrence shares no traces with the issue filed for it
+  (consecutive windows don't overlap), so dedup matches it by
+  **lineage**: the open issue for the same mode and rubric version. It
+  comments "Recurred in window …" with that window's trace IDs instead
+  of filing a duplicate; the report's `## Tracker dedup` table shows
+  `matched by: lineage`.
+- Before commenting, docket records the reported cluster and traces in
+  the issue's provenance block, so re-running that window later skips
+  rather than repeating the comment.
+- Lineage only covers issues that are open in the tracker. Close an
+  issue once it's fixed: the next occurrence opens a fresh one.
+
 This is what makes scheduled runs (`docket run --since 1h` every
-hour from cron) safe: each run only surfaces new failures.
+hour from cron, or `docket serve`) safe: each run files only new
+failures and adds recurrences to the issues already open.
 
 ## Troubleshooting
 

@@ -46,7 +46,7 @@ from docket.models.issue import IssueDraft, IssueProvenance, make_labels
 # -- shared draft ------------------------------------------------------------
 
 
-def _make_draft(*, members: list[str] | None = None) -> IssueDraft:
+def _make_draft(*, members: list[str] | None = None, run_id: str = "r-parity") -> IssueDraft:
     mode_id = "hallucination"
     rubric_version = "agents-builtin@1.0.0"
     # Real behavior: cluster_id is a hash of the member trace IDs, so a grown
@@ -57,14 +57,14 @@ def _make_draft(*, members: list[str] | None = None) -> IssueDraft:
         mode_id=mode_id,
         cluster_id=cluster_id,
         representative_trace_id=(members or ["t-1"])[0],
-        run_id="r-parity",
+        run_id=run_id,
         member_trace_ids=members or ["t-1", "t-2"],
     )
     return IssueDraft(
         cluster_id=cluster_id,
         mode_id=mode_id,
         rubric_version=rubric_version,
-        run_id="r-parity",
+        run_id=run_id,
         severity="high",
         representative_trace_id=(members or ["t-1"])[0],
         member_trace_ids=members or ["t-1", "t-2"],
@@ -100,6 +100,21 @@ class _JiraFake:
             body = json.loads(request.read().decode())
             self.comments.append((issue_id, _adf_to_text(body.get("body"))))
             return httpx.Response(201, json={"id": "c"})
+        issue_id = path.removeprefix("/rest/api/3/issue/")
+        if issue_id in self.issues and request.method == "GET":
+            stored = self.issues[issue_id]
+            return httpx.Response(
+                200,
+                json={
+                    "id": issue_id,
+                    "key": stored["key"],
+                    "fields": {"description": _adf_doc(stored["body"])},
+                },
+            )
+        if issue_id in self.issues and request.method == "PUT":
+            fields = json.loads(request.read().decode())["fields"]
+            self.issues[issue_id]["body"] = _adf_to_text(fields["description"])
+            return httpx.Response(204)
         return httpx.Response(404, text=f"unmocked: {request.method} {path}")
 
     def _search(self, request: httpx.Request) -> httpx.Response:
@@ -205,6 +220,8 @@ class _LinearFake:
             return self._list(variables)
         if "issueCreate" in query and "mutation IssueCreate" in query:
             return self._create(variables)
+        if "mutation IssueUpdate" in query:
+            return self._update(variables)
         if "commentCreate" in query:
             self.comments.append((variables["input"]["issueId"], variables["input"]["body"]))
             return httpx.Response(
@@ -282,6 +299,21 @@ class _LinearFake:
             },
         )
 
+    def _update(self, variables: dict[str, Any]) -> httpx.Response:
+        issue = self.issues[variables["id"]]
+        if "description" in variables["input"]:
+            issue["body"] = variables["input"]["description"]
+        node = {
+            "id": issue["id"],
+            "identifier": issue["key"],
+            "url": issue["url"],
+            "title": issue["title"],
+            "description": issue["body"],
+            "state": dict(issue["state"]),
+            "labels": {"nodes": [{"name": n} for n in issue["labels"]]},
+        }
+        return httpx.Response(200, json={"data": {"issueUpdate": {"success": True, "issue": node}}})
+
     def _create(self, variables: dict[str, Any]) -> httpx.Response:
         inp = variables["input"]
         issue_id = f"linear-{self._next_id}"
@@ -348,6 +380,10 @@ class _GitHubFake:
             body = json.loads(request.read().decode())
             self.comments.append((number, body["body"]))
             return httpx.Response(201, json={"id": 999})
+        number = request.url.path.removeprefix(self._issues_path + "/")
+        if number in self.issues and request.method == "PATCH":
+            self.issues[number].update(json.loads(request.read().decode()))
+            return httpx.Response(200, json=self._to_github(self.issues[number]))
         return httpx.Response(404, text=f"unmocked: {request.method} {request.url.path}")
 
     def _list(self, request: httpx.Request) -> httpx.Response:
@@ -362,21 +398,19 @@ class _GitHubFake:
                 continue
             if all(lbl in stored["labels"] for lbl in wanted):
                 matched.append(stored)
-        return httpx.Response(
-            200,
-            json=[
-                {
-                    "id": int(i["id"]),
-                    "number": int(i["id"]),
-                    "html_url": i["url"],
-                    "title": i["title"],
-                    "body": i["body"],
-                    "state": i["state"],
-                    "labels": [{"name": n} for n in i["labels"]],
-                }
-                for i in matched
-            ],
-        )
+        return httpx.Response(200, json=[self._to_github(i) for i in matched])
+
+    @staticmethod
+    def _to_github(stored: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": int(stored["id"]),
+            "number": int(stored["id"]),
+            "html_url": stored["url"],
+            "title": stored["title"],
+            "body": stored["body"],
+            "state": stored["state"],
+            "labels": [{"name": n} for n in stored["labels"]],
+        }
 
     def _create(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.read().decode())
@@ -407,10 +441,12 @@ class _GitHubFake:
 # -- adapter factory fixtures -----------------------------------------------
 
 
-@pytest.fixture(params=["jira", "linear", "github"])
-def tracker_pair(request: pytest.FixtureRequest) -> tuple[str, Tracker]:
-    """Build (name, tracker) for each adapter, backed by an in-memory fake."""
-    name = request.param
+_Fake = _JiraFake | _LinearFake | _GitHubFake
+
+
+def _build_tracker(name: str) -> tuple[Tracker, _Fake]:
+    """Build the named adapter over its in-memory fake."""
+    fake: _Fake
     if name == "jira":
         fake = _JiraFake()
         transport = httpx.MockTransport(fake.handler)
@@ -432,7 +468,21 @@ def tracker_pair(request: pytest.FixtureRequest) -> tuple[str, Tracker]:
         transport = httpx.MockTransport(fake.handler)
         client = httpx.AsyncClient(transport=transport, base_url="https://api.github.com")
         tracker = GitHubAdapter(owner="o", repo="r", token="t", client=client)  # noqa: S106
-    return name, tracker
+    return tracker, fake
+
+
+@pytest.fixture(params=["jira", "linear", "github"])
+def tracker_pair(request: pytest.FixtureRequest) -> tuple[str, Tracker]:
+    """Build (name, tracker) for each adapter, backed by an in-memory fake."""
+    tracker, _fake = _build_tracker(request.param)
+    return request.param, tracker
+
+
+@pytest.fixture(params=["jira", "linear", "github"])
+def tracker_with_fake(request: pytest.FixtureRequest) -> tuple[str, Tracker, _Fake]:
+    """Like `tracker_pair`, plus the fake so tests can inspect what landed."""
+    tracker, fake = _build_tracker(request.param)
+    return request.param, tracker, fake
 
 
 # -- parity assertions ------------------------------------------------------
@@ -500,6 +550,35 @@ async def test_dedup_loop_is_idempotent_across_adapters(
         )
         assert run3[0].action == "commented", f"[{name}] run 3 should comment"
         assert run3[0].new_member_trace_ids == ["t-3"], f"[{name}] comment should mention only t-3"
+    finally:
+        await tracker.close()
+
+
+async def test_cross_window_recurrence_comments_once_across_adapters(
+    tracker_with_fake: tuple[str, Tracker, _Fake],
+) -> None:
+    """A failure recurring in the next window shares no traces with the issue
+    filed for it; every tracker must still get one comment, not a duplicate
+    issue, and a re-run of that window must post nothing more. The re-run
+    only skips if the provenance ledger survives each adapter's update path."""
+    name, tracker, fake = tracker_with_fake
+    window_1 = _make_draft(members=["w1-a", "w1-b"], run_id="r-window-1")
+    window_2 = _make_draft(members=["w2-a", "w2-b"], run_id="r-window-2")
+    try:
+        run1 = await dedup_drafts([window_1], tracker=tracker, auto_post_threshold="low")
+        assert run1[0].action == "created", f"[{name}] window 1 should create"
+        assert run1[0].created_issue is not None
+        run2 = await dedup_drafts([window_2], tracker=tracker, auto_post_threshold="low")
+        assert run2[0].action == "commented", f"[{name}] recurrence should comment"
+        assert run2[0].matched_by == "lineage"
+        assert run2[0].existing_issue is not None
+        assert run2[0].existing_issue.id == run1[0].created_issue.id
+        assert run2[0].new_member_trace_ids == ["w2-a", "w2-b"]
+        rerun = await dedup_drafts([window_2], tracker=tracker, auto_post_threshold="low")
+        assert rerun[0].action == "skipped", f"[{name}] re-running window 2 should skip"
+        assert len(fake.comments) == 1, f"[{name}] exactly one comment expected"
+        assert "Recurred in" in fake.comments[0][1]
+        assert len(await tracker.list_open_issues(filter={"labels": window_1.labels})) == 1
     finally:
         await tracker.close()
 

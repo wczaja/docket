@@ -14,7 +14,7 @@ from docket.adapters.tracker.jira import (
     _markdown_to_adf,
 )
 from docket.errors import TrackerError
-from docket.models.issue import IssueDraft, IssuePatch
+from docket.models.issue import Issue, IssueDraft, IssuePatch, IssueProvenance
 
 
 def _make_cloud_adapter(
@@ -307,6 +307,35 @@ async def test_cloud_search_page_cap_logs_warning(caplog: pytest.LogCaptureFixtu
         issues = await adapter.list_open_issues(filter={"labels": ["docket"]})
     assert len(issues) == 20  # one issue per page, capped at _MAX_PAGES
     assert any("dedup may miss matches" in r.message for r in caplog.records)
+    listing = await adapter.list_open_issues_v2(filter={"labels": ["docket"]})
+    assert listing.truncated is True
+    assert listing.page_limit == 20
+
+
+async def test_datacenter_search_page_cap_flags_truncation() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        start_at = int(request.url.params.get("startAt", "0"))
+        # Claims 10k results; serves one per page.
+        return httpx.Response(
+            200,
+            json={
+                "issues": [{"id": str(start_at), "key": f"AGT-{start_at}", "fields": {}}],
+                "total": 10_000,
+            },
+        )
+
+    listing = await _make_dc_adapter(handler).list_open_issues_v2(filter={"labels": ["docket"]})
+    assert listing.truncated is True
+    assert len(listing.issues) == 20
+
+
+async def test_list_open_issues_v2_is_complete_when_pages_run_out() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"issues": [{"id": "1", "key": "AGT-1", "fields": {}}]})
+
+    listing = await _make_cloud_adapter(handler).list_open_issues_v2(filter={"labels": ["docket"]})
+    assert listing.truncated is False
+    assert [i.key for i in listing.issues] == ["AGT-1"]
 
 
 async def test_list_open_issues_raises_on_http_error() -> None:
@@ -717,3 +746,139 @@ async def test_status_category_indeterminate_is_open() -> None:
     adapter = _make_cloud_adapter(_search_handler_returning(issue))
     issues = await adapter.list_open_issues()
     assert issues[0].state == "open"
+
+
+# -- update_provenance ----------------------------------------------------------
+
+
+def _provenance(**overrides: Any) -> IssueProvenance:
+    fields: dict[str, Any] = {
+        "rubric_version": "agents@1.0.0",
+        "mode_id": "hallucination",
+        "cluster_id": "cl-1",
+        "representative_trace_id": "t-1",
+        "run_id": "r-1",
+        "member_trace_ids": ["t-1"],
+    }
+    fields.update(overrides)
+    return IssueProvenance.model_validate(fields)
+
+
+def _provenance_issue(prov: IssueProvenance) -> Issue:
+    return Issue(
+        id="10001",
+        key="AGT-1",
+        title="t",
+        body=f"Flattened body.\n\n{prov.to_html_comment()}",
+        labels=["docket"],
+    )
+
+
+async def test_cloud_update_provenance_patches_only_the_provenance_paragraph() -> None:
+    """`Issue.body` on Cloud is a lossy text rendering; the live ADF document
+    is patched instead, so formatting humans added survives."""
+    old = _provenance()
+    new = old.with_reported(cluster_id="cl-2", trace_ids=["t-2"])
+    heading = {
+        "type": "heading",
+        "attrs": {"level": 2},
+        "content": [{"type": "text", "text": "RCA"}],
+    }
+    bullets = {
+        "type": "bulletList",
+        "content": [
+            {
+                "type": "listItem",
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "cache miss"}]}
+                ],
+            }
+        ],
+    }
+    marked = {
+        "type": "paragraph",
+        "content": [{"type": "text", "text": "Owner: ", "marks": [{"type": "strong"}]}],
+    }
+    live_doc = {
+        "type": "doc",
+        "version": 1,
+        "content": [
+            heading,
+            bullets,
+            marked,
+            {"type": "paragraph", "content": [{"type": "text", "text": old.to_html_comment()}]},
+        ],
+    }
+    requests: list[tuple[str, dict[str, Any] | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/rest/api/3/issue/10001"
+        if request.method == "GET":
+            requests.append(("GET", None))
+            assert request.url.params.get("fields") == "description"
+            return httpx.Response(200, json={"id": "10001", "fields": {"description": live_doc}})
+        requests.append((request.method, json.loads(request.read().decode())))
+        return httpx.Response(204)
+
+    await _make_cloud_adapter(handler).update_provenance(_provenance_issue(old), new)
+    assert [method for method, _ in requests] == ["GET", "PUT"]
+    put = requests[1][1]
+    assert put is not None
+    content = put["fields"]["description"]["content"]
+    assert content[:3] == [heading, bullets, marked]
+    assert content[3] == {
+        "type": "paragraph",
+        "content": [{"type": "text", "text": new.to_html_comment()}],
+    }
+
+
+async def test_cloud_update_provenance_appends_a_paragraph_when_missing() -> None:
+    new = _provenance()
+    puts: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json={"id": "10001", "fields": {"description": None}})
+        puts.append(json.loads(request.read().decode()))
+        return httpx.Response(204)
+
+    await _make_cloud_adapter(handler).update_provenance(_provenance_issue(new), new)
+    ((put,),) = [puts]
+    assert put["fields"]["description"] == {
+        "type": "doc",
+        "version": 1,
+        "content": [
+            {"type": "paragraph", "content": [{"type": "text", "text": new.to_html_comment()}]}
+        ],
+    }
+
+
+@pytest.mark.parametrize(("failing_method", "match"), [("GET", "get_issue"), ("PUT", "update")])
+async def test_cloud_update_provenance_raises_on_http_error(
+    failing_method: str, match: str
+) -> None:
+    prov = _provenance()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == failing_method:
+            return httpx.Response(403, text="forbidden")
+        return httpx.Response(200, json={"id": "10001", "fields": {"description": None}})
+
+    with pytest.raises(TrackerError, match=f"{match}.*403"):
+        await _make_cloud_adapter(handler).update_provenance(_provenance_issue(prov), prov)
+
+
+async def test_datacenter_update_provenance_rewrites_the_verbatim_description() -> None:
+    old = _provenance()
+    new = old.with_reported(cluster_id="cl-2", trace_ids=["t-2"])
+    puts: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "PUT":
+            puts.append(json.loads(request.read().decode()))
+            return httpx.Response(204)
+        return httpx.Response(200, json={"id": "10001", "key": "AGT-1", "fields": {}})
+
+    await _make_dc_adapter(handler).update_provenance(_provenance_issue(old), new)
+    ((put,),) = [puts]
+    assert put == {"fields": {"description": f"Flattened body.\n\n{new.to_html_comment()}"}}

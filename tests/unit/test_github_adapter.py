@@ -12,7 +12,7 @@ from docket.adapters.tracker.github import (
     _parse_link_next,
 )
 from docket.errors import TrackerError
-from docket.models.issue import IssueDraft, IssuePatch
+from docket.models.issue import Issue, IssueDraft, IssuePatch, IssueProvenance
 
 
 def _make_adapter(
@@ -410,6 +410,62 @@ async def test_list_open_issues_page_cap_logs_warning(
     assert calls == 20  # _MAX_PAGES
     assert len(issues) == 20
     assert any("dedup may miss matches" in r.message for r in caplog.records)
+
+
+async def test_list_open_issues_v2_flags_truncation_at_the_page_cap() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[{"id": 1, "number": 1, "title": "t", "body": "", "state": "open"}],
+            headers={"Link": '<https://api.github.com/repos/o/r/issues?page=99>; rel="next"'},
+        )
+
+    listing = await _make_adapter(handler).list_open_issues_v2()
+    assert listing.truncated is True
+    assert listing.page_limit == 20
+    assert len(listing.issues) == 20
+
+
+async def test_list_open_issues_v2_is_complete_when_pages_run_out() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json=[{"id": 1, "number": 1, "title": "t", "body": "", "state": "open"}]
+        )
+
+    listing = await _make_adapter(handler).list_open_issues_v2(filter={"labels": ["docket"]})
+    assert listing.truncated is False
+    assert [i.id for i in listing.issues] == ["1"]
+
+
+async def test_update_provenance_rewrites_only_the_trailing_block() -> None:
+    """GitHub stores bodies verbatim, so the default body rewrite is exact."""
+    old = IssueProvenance(
+        rubric_version="agents@1.0.0",
+        mode_id="hallucination",
+        cluster_id="cl-1",
+        representative_trace_id="t-1",
+        run_id="r-1",
+        member_trace_ids=["t-1"],
+    )
+    new = old.with_reported(cluster_id="cl-2", trace_ids=["t-2"])
+    body = f"**Edited by a human.**\n\n- keep this list\n\n{old.to_html_comment()}"
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["method"] = request.method
+        captured["path"] = request.url.path
+        captured["body"] = json.loads(request.read().decode())
+        return httpx.Response(
+            200, json={"id": 7, "number": 7, "title": "t", "body": "", "state": "open"}
+        )
+
+    issue = Issue(id="7", key="7", title="t", body=body, labels=["docket"])
+    await _make_adapter(handler).update_provenance(issue, new)
+    assert captured["method"] == "PATCH"
+    assert captured["path"] == "/repos/docket/docket/issues/7"
+    assert captured["body"] == {
+        "body": f"**Edited by a human.**\n\n- keep this list\n\n{new.to_html_comment()}"
+    }
 
 
 # -- update_issue -----------------------------------------------------------

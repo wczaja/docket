@@ -219,3 +219,80 @@ def test_issue_patch_defaults_leave_fields_unset() -> None:
     assert patch.body is None
     assert patch.labels is None
     assert patch.state is None
+
+
+# -- dedup ledger ------------------------------------------------------------
+
+
+def _prov(**overrides: object) -> IssueProvenance:
+    fields: dict[str, object] = {
+        "rubric_version": "agents@1.0.0",
+        "mode_id": "hallucination",
+        "cluster_id": "cl-1",
+        "representative_trace_id": "t-1",
+        "run_id": "r-1",
+        "member_trace_ids": ["t-1", "t-2"],
+    }
+    fields.update(overrides)
+    return IssueProvenance.model_validate(fields)
+
+
+def test_provenance_without_ledger_serializes_exactly_as_before() -> None:
+    """An empty ledger is left out, so freshly drafted bodies don't change."""
+    payload = json.loads(_prov().to_html_comment()[len("<!-- docket:provenance ") : -len(" -->")])
+    assert "reported_cluster_ids" not in payload
+    assert "reported_trace_ids" not in payload
+
+
+def test_provenance_ledger_round_trips() -> None:
+    prov = _prov(reported_cluster_ids=["cl-2"], reported_trace_ids=["t-3", "t-4"])
+    assert IssueProvenance.parse_from_body(f"body\n\n{prov.to_html_comment()}") == prov
+    # Bodies written before the ledger existed parse with an empty one.
+    assert _prov().reported_cluster_ids == []
+    assert _prov().reported_trace_ids == []
+
+
+def test_known_trace_ids_covers_members_and_reported_traces() -> None:
+    prov = _prov(reported_trace_ids=["t-3"])
+    assert prov.known_trace_ids == {"t-1", "t-2", "t-3"}
+
+
+def test_with_reported_appends_without_duplicates() -> None:
+    prov = _prov().with_reported(cluster_id="cl-2", trace_ids=["t-3", "t-4"])
+    prov = prov.with_reported(cluster_id="cl-2", trace_ids=["t-4", "t-5"])
+    assert prov.reported_cluster_ids == ["cl-2"]
+    assert prov.reported_trace_ids == ["t-3", "t-4", "t-5"]
+    # The identity fields are untouched.
+    assert prov.cluster_id == "cl-1"
+    assert prov.member_trace_ids == ["t-1", "t-2"]
+
+
+def test_with_reported_keeps_only_the_most_recent_entries() -> None:
+    prov = _prov()
+    for i in range(250):
+        prov = prov.with_reported(cluster_id=f"cl-{i:03d}", trace_ids=[f"t-{i:03d}"])
+    assert len(prov.reported_cluster_ids) == 200
+    assert prov.reported_cluster_ids[-1] == "cl-249"
+    assert "cl-049" not in prov.reported_cluster_ids
+    assert len(prov.reported_trace_ids) == 100
+    assert prov.reported_trace_ids[0] == "t-150"
+
+
+def test_replace_in_body_swaps_only_the_live_block() -> None:
+    old = _prov()
+    quoted = _prov(cluster_id="quoted")
+    body = f"Intro.\n\n{quoted.to_html_comment()}\n\nMore.\n\n{old.to_html_comment()}\n\nOutro."
+    new = old.with_reported(cluster_id="cl-2", trace_ids=["t-9"])
+    replaced = new.replace_in_body(body)
+    assert IssueProvenance.parse_from_body(replaced) == new
+    # Everything else — including an earlier quoted block — is verbatim.
+    assert replaced.startswith(f"Intro.\n\n{quoted.to_html_comment()}\n\nMore.\n\n")
+    assert replaced.endswith("\n\nOutro.")
+
+
+def test_replace_in_body_appends_when_the_body_has_no_block() -> None:
+    prov = _prov()
+    assert prov.replace_in_body("Human-written body.") == (
+        f"Human-written body.\n\n{prov.to_html_comment()}"
+    )
+    assert prov.replace_in_body("") == prov.to_html_comment()

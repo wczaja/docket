@@ -1,4 +1,8 @@
-"""Trace-listing result types (proposal 001 Specs B + C).
+"""Listing result types (proposal 001 Specs B + C, OQ-4).
+
+`IssueListing` is what `Tracker.list_open_issues_v2` returns: the tracker
+side of the same loud-truncation contract, where it guards dedup — a
+listing cut off at the page ceiling cannot prove "no open issue matches".
 
 `TraceListing` is what `TraceBackend.list_traces_v2` returns: per-trace
 summaries plus a loud `truncated` flag so a backend pagination ceiling can
@@ -20,6 +24,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from docket.errors import BackendError
+from docket.models.issue import Issue
 
 TraceStatus = Literal["ok", "error"]
 
@@ -59,6 +64,20 @@ class TraceListing(BaseModel):
     @property
     def trace_ids(self) -> list[str]:
         return [s.trace_id for s in self.summaries]
+
+
+class IssueListing(BaseModel):
+    """Result of `Tracker.list_open_issues_v2`.
+
+    `truncated` means the adapter stopped paginating at its page ceiling
+    with results still pending, so `issues` is a lower bound. Dedup treats
+    that as "a duplicate can't be ruled out": the poster queues drafts that
+    matched nothing instead of auto-posting them.
+    """
+
+    issues: list[Issue]
+    truncated: bool = False
+    page_limit: int | None = None
 
 
 class TraceFilter(BaseModel):

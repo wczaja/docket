@@ -75,6 +75,7 @@ class Tracker(ABC):
     async def create_issue(draft: IssueDraft) -> Issue
     async def update_issue(issue_id, patch) -> Issue
     async def comment_on_issue(issue_id, comment) -> None
+    async def update_provenance(issue, provenance) -> None   # default: body rewrite via update_issue
     async def close() -> None
 ```
 
@@ -87,7 +88,18 @@ Obligations:
 - **Loud truncation, dedup safety.** Same `truncated` contract as
   backends. The poster reacts to a truncated open-issue listing by
   demoting auto-posts to `needs_create` (a duplicate can't be ruled
-  out); the adapter's only job is honesty.
+  out); the adapter's only job is honesty. The base class's
+  `list_open_issues_v2` reports every listing as complete, so a
+  paginating adapter must override it.
+- **Lossless provenance writes.** Before commenting on an existing
+  issue, the poster records what it reported in the issue's provenance
+  block via `update_provenance`, and re-runs rely on reading that record
+  back. Everything else in the body must survive. The default rewrites
+  `Issue.body` through `update_issue`, which is exact when bodies round-trip
+  verbatim (GitHub, Linear, Jira Data Center). Jira Cloud overrides it
+  to patch only the provenance paragraph of the live ADF document,
+  because its `Issue.body` is a flattened rendering that drops
+  formatting humans added.
 - **Rate-limit respect.** Jira Cloud (~10 req/s) and GitHub (5000/hr)
   limits are real; retry with backoff, honor `Retry-After`.
 - Typed errors: `TrackerError` / `CredentialError`.

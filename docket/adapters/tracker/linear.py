@@ -34,6 +34,7 @@ from docket.adapters._retry import request_with_retry
 from docket.adapters.base import Tracker
 from docket.errors import TrackerError
 from docket.models.issue import Issue, IssueDraft, IssuePatch, IssueState
+from docket.models.listing import IssueListing
 from docket.observability import redact
 
 log = logging.getLogger(__name__)
@@ -200,6 +201,12 @@ class LinearAdapter(Tracker):
         self,
         filter: dict[str, Any] | None = None,
     ) -> list[Issue]:
+        return (await self.list_open_issues_v2(filter)).issues
+
+    async def list_open_issues_v2(
+        self,
+        filter: dict[str, Any] | None = None,
+    ) -> IssueListing:
         labels = (filter or {}).get("labels") if filter else None
         graphql_filter: dict[str, Any] = {
             "team": {"id": {"eq": self._team_id}},
@@ -226,7 +233,7 @@ class LinearAdapter(Tracker):
             end_cursor = page_info.get("endCursor") if isinstance(page_info, dict) else None
             has_next = bool(page_info.get("hasNextPage")) if isinstance(page_info, dict) else False
             if not has_next or not isinstance(end_cursor, str) or not end_cursor:
-                return out
+                return IssueListing(issues=out)
             after = end_cursor
         log.warning(
             "Linear list_open_issues hit the %d-page cap with more results pending; "
@@ -234,7 +241,7 @@ class LinearAdapter(Tracker):
             _MAX_PAGES,
             len(out),
         )
-        return out
+        return IssueListing(issues=out, truncated=True, page_limit=_MAX_PAGES)
 
     async def search_issues(self, query: str, k: int = 10) -> list[Issue]:
         data = await self._graphql(

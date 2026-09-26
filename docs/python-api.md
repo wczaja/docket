@@ -18,6 +18,7 @@ from docket.adapters.trace.phoenix import PhoenixAdapter
 from docket.agent.triage import run_triage_pipeline
 from docket.rubric.loader import load_rubric
 
+
 async def main() -> None:
     backend = PhoenixAdapter(base_url="http://localhost:6006")
     rubric = load_rubric("docket.dev/builtin/agents/v1")
@@ -35,6 +36,7 @@ async def main() -> None:
     print(result.report_markdown)
     for cluster in result.clusters:
         print(cluster.mode_id, cluster.stats.size, cluster.representative_trace_id)
+
 
 asyncio.run(main())
 ```
@@ -66,6 +68,7 @@ wrapper around this). All parameters keyword-only:
 | `output_dir` | `Path \| None` | draft/report queue dir; default `~/.docket/queued-issues/` |
 | `tracker` | `Tracker \| None` | enables dedup + posting; `None` = queue locally |
 | `auto_post_threshold` | `"never"` | `critical\|high\|medium\|low\|never` |
+| `lineage_matcher` | `LineageMatcher \| None = match_mode_lineage` | links a draft to an open issue when neither its `cluster_id` nor its traces match: the cross-window case. Default: one open issue per (mode, rubric version); `None` = cluster-only dedup |
 | `sample_count`, `sample_strategy`, `stratify_by` | `None`, `"uniform"`, `None` | run_id-seeded sampling (`uniform\|stratified\|errors-only`) |
 | `checkpoint` | `bool = False` | sentinel-based resumability (needs write access) |
 | `max_traces_per_run` | `int \| None = 1000` | budget gate; `None` disables |
@@ -79,8 +82,33 @@ classification failures are absorbed and reported, not raised.
 **`TriageResult`** (attributes): `run_report: RunReport`,
 `clusters: list[Cluster]`, `drafts: list[IssueDraft]`,
 `report_markdown: str`, `dedup_outcomes` (per-draft tracker decision:
-posted / commented / skipped / needs_create), `review_outcomes`
+posted / commented / skipped / needs_create, with `matched_by` =
+`cluster_id` / `member_overlap` / `lineage` for matches), `review_outcomes`
 (populated only by the CLI's `--review`).
+
+### Cross-window dedup: `docket.agent.subagents.poster.LineageMatcher`
+
+Consecutive windows share no traces, so a failure that recurs in a
+later window can't match its open issue by `cluster_id` (a hash of the
+member traces) or by trace overlap. For such a draft, the poster asks a
+`LineageMatcher`:
+
+```python
+LineageMatcher = Callable[
+    [IssueDraft, Sequence[LineageCandidate]],  # candidates: never empty
+    Awaitable[LineageCandidate | None],  # None: treat as a new failure
+]
+```
+
+Each `LineageCandidate(issue, provenance)` is an open issue carrying the
+draft's `mode:` and `rubric:` labels, with parsed provenance naming the
+same mode and rubric version. The default, `match_mode_lineage`, returns
+the oldest candidate by tracker key, which gives one open issue per
+lineage. A custom matcher can instead compare evidence, for example
+embedding similarity, to keep sub-patterns of one mode in separate
+issues. Keep it deterministic. Re-runs stay idempotent either way: the
+poster records every reported cluster in the issue's provenance and
+matches that record before it consults the matcher.
 
 ### `compute_run_id(*, backend_id, rubric_version, since, until) -> str`
 
@@ -112,8 +140,9 @@ from docket.adapters.tracker.github import GitHubAdapter
 PhoenixAdapter(base_url, api_key=None, max_list_pages=...)
 LangfuseAdapter(host, public_key=None, secret_key=None, max_list_pages=...)
 LangsmithAdapter(endpoint, api_key, project=None, max_list_pages=...)
-JiraAdapter(host, project, email=None, api_token=None, pat=None,
-            deployment=None, max_list_pages=...)   # deployment: "cloud"|"datacenter"|None=auto
+JiraAdapter(
+    host, project, email=None, api_token=None, pat=None, deployment=None, max_list_pages=...
+)  # deployment: "cloud"|"datacenter"|None=auto
 LinearAdapter(team_id, api_key, endpoint=..., max_list_pages=...)
 GitHubAdapter(owner, repo, token, api_url=..., max_list_pages=...)
 ```
@@ -149,8 +178,14 @@ async def search_issues(query, k=10) -> list[Issue]
 async def create_issue(draft: IssueDraft) -> Issue
 async def update_issue(issue_id, patch: IssuePatch) -> Issue
 async def comment_on_issue(issue_id, comment) -> None
+async def update_provenance(issue: Issue, provenance: IssueProvenance) -> None
 async def close() -> None
 ```
+
+`list_open_issues_v2` and `update_provenance` have defaults built on the
+other methods: an untruncated listing, and a body rewrite through
+`update_issue`. Override them when your tracker paginates, or when its
+`Issue.body` isn't the verbatim stored body; see [adapters.md](adapters.md).
 
 ---
 
@@ -158,14 +193,18 @@ async def close() -> None
 
 ```python
 from docket.llm import (
-    build_provider, build_embedding_provider,
-    ModelProvider, AnthropicProvider, OpenAIProvider,
-    EmbeddingProvider, OpenAIEmbeddingProvider,
-    DEFAULT_PROVIDER_URI,    # "anthropic:claude-haiku-4-5-20251001"
-    DEFAULT_EMBEDDING_URI,   # "openai:text-embedding-3-small"
+    build_provider,
+    build_embedding_provider,
+    ModelProvider,
+    AnthropicProvider,
+    OpenAIProvider,
+    EmbeddingProvider,
+    OpenAIEmbeddingProvider,
+    DEFAULT_PROVIDER_URI,  # "anthropic:claude-haiku-4-5-20251001"
+    DEFAULT_EMBEDDING_URI,  # "openai:text-embedding-3-small"
 )
 
-provider = build_provider("anthropic:claude-sonnet-4-6")   # "provider:model" URI
+provider = build_provider("anthropic:claude-sonnet-4-6")  # "provider:model" URI
 embedder = build_embedding_provider(DEFAULT_EMBEDDING_URI)
 ```
 
@@ -188,8 +227,9 @@ from docket.agent.subagents.classifier import Classifier
 
 classifier = Classifier(provider, batch_size=1, concurrency=8)
 results = await classifier.classify_all(
-    [(trace_id, open_inference_trace), ...], rubric,
-)   # -> dict[trace_id, list[Classification]]
+    [(trace_id, open_inference_trace), ...],
+    rubric,
+)  # -> dict[trace_id, list[Classification]]
 ```
 
 Retries each (trace, mode) up to 3 times with backoff, then marks it
@@ -200,7 +240,7 @@ errored rather than raising.
 ## Rubrics
 
 ```python
-from docket.rubric.loader import load_rubric        # resolves + merges imports
+from docket.rubric.loader import load_rubric  # resolves + merges imports
 from docket.rubric.validator import validate_rubric_yaml
 from docket.rubric.spec import Rubric, Mode, Detection
 ```
@@ -225,7 +265,7 @@ serialization.
 | `Annotation` | backend-bound classification: adds `run_id, severity, confidence, excerpt`; `idempotency_key()` = `trace_id\|run_id\|rubric_version\|mode_id` |
 | `Cluster`, `ClusterStats` | `cluster_id, mode_id, severity, member_trace_ids, representative_trace_id, representative_excerpt, stats(size, min/max/mean confidence)`; `compute_cluster_id()` is deterministic |
 | `IssueDraft` | `cluster_id, mode_id, rubric_version, run_id, severity, representative_trace_id, member_trace_ids, title, body, labels` — body ends with the provenance comment |
-| `IssueProvenance` | parse/emit the `<!-- docket:provenance {...} -->` block (`parse_from_body`) |
+| `IssueProvenance` | parse/emit the `<!-- docket:provenance {...} -->` block (`parse_from_body`, `replace_in_body`); carries the dedup ledger (`reported_cluster_ids`, `reported_trace_ids`) |
 | `Issue`, `IssuePatch`, `IssueListing` | tracker-side shapes; `IssueListing.truncated` is the dedup-safety flag |
 | `TraceListing`, `TraceSummary`, `RESERVED_FILTER_KEYS` | listing-with-summaries + `truncated` flag |
 | `RunReport`, `ModeStats`, `TraceResult` | the structured run report behind `report_markdown`: window, counts, `traces_listed`, `listing_truncated`, per-mode positive/negative/error counts, `annotations_written` |
